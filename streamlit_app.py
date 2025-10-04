@@ -171,7 +171,7 @@ with st.sidebar:
         translated_strings = st.session_state.translations[st.session_state.current_lang]
 
     # PDF upload
-   st.sidebar.success(f"✅ {len(uploaded_files)} PDF(s) uploaded")
+st.sidebar.success(f"✅ {len(uploaded_files)} PDF(s) uploaded")
 for uploaded_file in uploaded_files:
         pdf_bytes = io.BytesIO(uploaded_file.read())
         pdf_reader = PyPDF2.PdfReader(pdf_bytes)
