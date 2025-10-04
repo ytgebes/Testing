@@ -1,16 +1,19 @@
+import streamlit as st
 import json
 import time
 import pandas as pd
 from streamlit_extras.let_it_rain import rain
 from streamlit_extras.mention import mention
+import google.generativeai as genai
 
+# Configure Gemini API
 genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 model = genai.GenerativeModel("gemini-2.5-flash")
 
+# Supported languages
 LANGUAGES = {
     "Afrikaans": {"label": "🇿🇦 Afrikaans", "code": "af"},
     "العربية": {"label": "🇸🇦 العربية", "code": "ar"},
-    "Français": {"label": "🇫🇷 Français", "code": "fr"},
     "Tiếng Việt": {"label": "🇻🇳 Tiếng Việt", "code": "vi"},
     "isiXhosa": {"label": "🇿🇦 isiXhosa", "code": "xh"},
     "ייִדיש": {"label": "🇮🇱 ייִדיש", "code": "yi"},
@@ -18,6 +21,7 @@ LANGUAGES = {
     "isiZulu": {"label": "🇿🇦 isiZulu", "code": "zu"},
 }
 
+# UI strings in English
 UI_STRINGS_EN = {
     "title": "Simplified Knowledge",
     "description": "A dynamic dashboard that summarizes NASA bioscience publications and explores impacts and results.",
@@ -30,7 +34,7 @@ UI_STRINGS_EN = {
     "button_response": "Hooray"
 }
 
-
+# Helper function: extract JSON from model output
 def extract_json_from_text(text):
     start = text.find('{')
     end = text.rfind('}')
@@ -38,7 +42,7 @@ def extract_json_from_text(text):
         raise ValueError("No JSON object found in model output.")
     return json.loads(text[start:end+1])
 
-
+# Helper function: translate dictionary via Gemini
 def translate_dict_via_gemini(source_dict: dict, target_lang_name: str):
     prompt = (
         f"Translate the VALUES of the following JSON object into {target_lang_name}.\n"
@@ -48,7 +52,7 @@ def translate_dict_via_gemini(source_dict: dict, target_lang_name: str):
     resp = model.generate_content(prompt)
     return extract_json_from_text(resp.text)
 
-
+# Helper function: translate list via Gemini
 def translate_list_via_gemini(items: list, target_lang_name: str):
     prompt = (
         f"Translate this list of short strings into {target_lang_name}. "
@@ -62,13 +66,13 @@ def translate_list_via_gemini(items: list, target_lang_name: str):
         raise ValueError("No JSON array found in model output.")
     return json.loads(resp.text[start:end+1])
 
-
+# Initialize session state
 if "current_lang" not in st.session_state:
     st.session_state.current_lang = "English"
-
 if "translations" not in st.session_state:
     st.session_state.translations = {"English": UI_STRINGS_EN.copy()}
 
+# Language selection
 lang_choice = st.selectbox(
     "🌐 Language",
     options=list(LANGUAGES.keys()),
@@ -76,6 +80,7 @@ lang_choice = st.selectbox(
     index=list(LANGUAGES.keys()).index(st.session_state.current_lang)
 )
 
+# Handle language translation
 if lang_choice != st.session_state.current_lang:
     rain(emoji="⏳", font_size=54, falling_speed=5, animation_length=2)
     with st.spinner(f"Translating UI to {lang_choice}..."):
@@ -96,6 +101,7 @@ if lang_choice != st.session_state.current_lang:
 else:
     translated_strings = st.session_state.translations[st.session_state.current_lang]
 
+# UI rendering
 st.title(translated_strings["title"])
 st.write(translated_strings["description"])
 
@@ -105,11 +111,11 @@ mention(
     url="https://www.spaceappschallenge.org/"
 )
 
+# File uploader and dataset translation
 uploaded_files = st.file_uploader(
     translated_strings["upload_label"],
     accept_multiple_files=True
 )
-
 translate_dataset = st.checkbox(translated_strings["translate_dataset_checkbox"])
 
 if uploaded_files:
@@ -130,13 +136,14 @@ if uploaded_files:
                 st.warning("Column translation failed: " + str(e))
         st.dataframe(df)
 
+# Gemini input
 user_input = st.text_input(translated_strings["ask_label"], key="gemini_input")
-
 if user_input:
     with st.spinner("Generating..."):
         resp = model.generate_content(user_input)
-        st.subheader(translated_strings["response_label"])
-        st.write(resp.text)
+    st.subheader(translated_strings["response_label"])
+    st.write(resp.text)
 
+# Button
 if st.button(translated_strings["click_button"]):
     st.write(translated_strings["button_response"])
