@@ -5,8 +5,6 @@ import pandas as pd
 from streamlit_extras.let_it_rain import rain
 from streamlit_extras.mention import mention
 
-genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-model = genai.GenerativeModel("gemini-2.5-flash")
 
 LANGUAGES = {
     "Afrikaans": {"label": "🇿🇦 Afrikaans", "code": "af"},
