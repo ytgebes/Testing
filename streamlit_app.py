@@ -1,5 +1,6 @@
 import streamlit as st
 import json
+import time
 import pandas as pd
 from streamlit_extras.let_it_rain import rain
 from streamlit_extras.mention import mention
@@ -31,8 +32,7 @@ UI_STRINGS_EN = {
     "click_button": "Click here, nothing happens",
     "translate_dataset_checkbox": "Translate dataset column names (may take time)",
     "mention_label": "Official NASA Website",
-    "button_response": "Hooray",
-    "about_us": "This dashboard was created to explore NASA bioscience publications dynamically."
+    "button_response": "Hooray"
 }
 
 # Helper functions
@@ -65,52 +65,25 @@ def translate_list_via_gemini(items: list, target_lang_name: str):
         raise ValueError("No JSON array found in model output.")
     return json.loads(resp.text[start:end+1])
 
-# --------------------
 # Initialize session state
-# --------------------
 if "current_lang" not in st.session_state:
     st.session_state.current_lang = "English"
 if "translations" not in st.session_state:
     st.session_state.translations = {"English": UI_STRINGS_EN.copy()}
-if "show_settings" not in st.session_state:
-    st.session_state.show_settings = False
-if "show_language_select" not in st.session_state:
-    st.session_state.show_language_select = False
 
 # --------------------
-# Settings button (top-left)
+# Sidebar: Language selection
 # --------------------
-col1, col2 = st.columns([1, 9])
-with col1:
-    if st.button("⚙️ Settings"):
-        st.session_state.show_settings = not st.session_state.show_settings
-        # Reset language dropdown visibility if we hide settings
-        if not st.session_state.show_settings:
-            st.session_state.show_language_select = False
-
-# --------------------
-# Settings dropdown
-# --------------------
-if st.session_state.show_settings:
-    option = st.selectbox("Select option", ["Languages", "About Us"])
-    
-    if option == "Languages":
-        st.session_state.show_language_select = True
-    else:
-        st.session_state.show_language_select = False
-        st.info(st.session_state.translations[st.session_state.current_lang]["about_us"])
-
-# --------------------
-# Language select
-# --------------------
-if st.session_state.show_language_select:
+with st.sidebar:
+    st.header("🌐 Language")
     lang_choice = st.selectbox(
-        "🌐 Language",
+        "Choose language",
         options=list(LANGUAGES.keys()),
         format_func=lambda x: LANGUAGES[x]["label"],
         index=list(LANGUAGES.keys()).index(st.session_state.current_lang)
     )
-    
+
+    # Handle language translation
     if lang_choice != st.session_state.current_lang:
         rain(emoji="⏳", font_size=54, falling_speed=5, animation_length=2)
         with st.spinner(f"Translating UI to {lang_choice}..."):
@@ -130,8 +103,6 @@ if st.session_state.show_language_select:
                 st.session_state.current_lang = "English"
     else:
         translated_strings = st.session_state.translations[st.session_state.current_lang]
-else:
-    translated_strings = st.session_state.translations[st.session_state.current_lang]
 
 # --------------------
 # Main UI
