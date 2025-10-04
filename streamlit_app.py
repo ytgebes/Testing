@@ -110,39 +110,8 @@ st.set_page_config(page_title="NASA BioSpace Dashboard", layout="wide")
 # ----------------- Sidebar -----------------
 with st.sidebar:
     st.header("⚙️ Settings")
-    menu_option = st.selectbox("Menu", ["Languages", "About Us"])
 
-    if menu_option == "Languages":
-        lang_choice = st.selectbox(
-            "Choose language",
-            options=list(LANGUAGES.keys()),
-            format_func=lambda x: LANGUAGES[x]["label"],
-            index=list(LANGUAGES.keys()).index(st.session_state.current_lang)
-        )
-
-        if lang_choice != st.session_state.current_lang:
-            rain(emoji="⏳", font_size=54, falling_speed=5, animation_length=2)
-            with st.spinner(f"Translating UI to {lang_choice}..."):
-                try:
-                    if lang_choice in st.session_state.translations:
-                        translated_strings = st.session_state.translations[lang_choice]
-                    else:
-                        translated_strings = translate_dict_via_gemini(
-                            st.session_state.translations["English"],
-                            lang_choice
-                        )
-                        st.session_state.translations[lang_choice] = translated_strings
-                    st.session_state.current_lang = lang_choice
-                except Exception as e:
-                    st.error("Translation failed — using English. Error: " + str(e))
-                    translated_strings = st.session_state.translations["English"]
-                    st.session_state.current_lang = "English"
-        else:
-            translated_strings = st.session_state.translations[st.session_state.current_lang]
-
-    elif menu_option == "About Us":
-        st.info(st.session_state.translations[st.session_state.current_lang]["about_us"])
-        translated_strings = st.session_state.translations[st.session_state.current_lang]
+ 
 
     # File uploads in sidebar
     uploaded_csv = st.file_uploader("Upload CSV", type=["csv"])
