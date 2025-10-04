@@ -12,6 +12,7 @@ model = genai.GenerativeModel("gemini-2.5-flash")
 
 # Supported languages
 LANGUAGES = {
+    "English": {"label": "🇬🇧 English", "code": "en"},
     "Afrikaans": {"label": "🇿🇦 Afrikaans", "code": "af"},
     "العربية": {"label": "🇸🇦 العربية", "code": "ar"},
     "Tiếng Việt": {"label": "🇻🇳 Tiếng Việt", "code": "vi"},
