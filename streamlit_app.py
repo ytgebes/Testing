@@ -1,6 +1,5 @@
 import streamlit as st
 import json
-import time
 import pandas as pd
 from streamlit_extras.let_it_rain import rain
 from streamlit_extras.mention import mention
@@ -66,52 +65,73 @@ def translate_list_via_gemini(items: list, target_lang_name: str):
         raise ValueError("No JSON array found in model output.")
     return json.loads(resp.text[start:end+1])
 
+# --------------------
 # Initialize session state
+# --------------------
 if "current_lang" not in st.session_state:
     st.session_state.current_lang = "English"
 if "translations" not in st.session_state:
     st.session_state.translations = {"English": UI_STRINGS_EN.copy()}
+if "show_settings" not in st.session_state:
+    st.session_state.show_settings = False
+if "show_language_select" not in st.session_state:
+    st.session_state.show_language_select = False
 
 # --------------------
-# Sidebar / Settings
+# Settings button (top-left)
 # --------------------
-with st.sidebar:
-    st.header("⚙️ Settings")
-    menu_option = st.selectbox("Select an option", ["Languages", "About Us"])
+col1, col2 = st.columns([1, 9])
+with col1:
+    if st.button("⚙️ Settings"):
+        st.session_state.show_settings = not st.session_state.show_settings
+        # Reset language dropdown visibility if we hide settings
+        if not st.session_state.show_settings:
+            st.session_state.show_language_select = False
 
-    if menu_option == "Languages":
-        lang_choice = st.selectbox(
-            "🌐 Language",
-            options=list(LANGUAGES.keys()),
-            format_func=lambda x: LANGUAGES[x]["label"],
-            index=list(LANGUAGES.keys()).index(st.session_state.current_lang)
-        )
-
-        # Handle language translation
-        if lang_choice != st.session_state.current_lang:
-            rain(emoji="⏳", font_size=54, falling_speed=5, animation_length=2)
-            with st.spinner(f"Translating UI to {lang_choice}..."):
-                try:
-                    if lang_choice in st.session_state.translations:
-                        translated_strings = st.session_state.translations[lang_choice]
-                    else:
-                        translated_strings = translate_dict_via_gemini(
-                            st.session_state.translations["English"],
-                            lang_choice
-                        )
-                        st.session_state.translations[lang_choice] = translated_strings
-                    st.session_state.current_lang = lang_choice
-                except Exception as e:
-                    st.error("Translation failed — using English. Error: " + str(e))
-                    translated_strings = st.session_state.translations["English"]
-                    st.session_state.current_lang = "English"
-        else:
-            translated_strings = st.session_state.translations[st.session_state.current_lang]
-
-    elif menu_option == "About Us":
+# --------------------
+# Settings dropdown
+# --------------------
+if st.session_state.show_settings:
+    option = st.selectbox("Select option", ["Languages", "About Us"])
+    
+    if option == "Languages":
+        st.session_state.show_language_select = True
+    else:
+        st.session_state.show_language_select = False
         st.info(st.session_state.translations[st.session_state.current_lang]["about_us"])
-        # Use English if no translation yet
+
+# --------------------
+# Language select
+# --------------------
+if st.session_state.show_language_select:
+    lang_choice = st.selectbox(
+        "🌐 Language",
+        options=list(LANGUAGES.keys()),
+        format_func=lambda x: LANGUAGES[x]["label"],
+        index=list(LANGUAGES.keys()).index(st.session_state.current_lang)
+    )
+    
+    if lang_choice != st.session_state.current_lang:
+        rain(emoji="⏳", font_size=54, falling_speed=5, animation_length=2)
+        with st.spinner(f"Translating UI to {lang_choice}..."):
+            try:
+                if lang_choice in st.session_state.translations:
+                    translated_strings = st.session_state.translations[lang_choice]
+                else:
+                    translated_strings = translate_dict_via_gemini(
+                        st.session_state.translations["English"],
+                        lang_choice
+                    )
+                    st.session_state.translations[lang_choice] = translated_strings
+                st.session_state.current_lang = lang_choice
+            except Exception as e:
+                st.error("Translation failed — using English. Error: " + str(e))
+                translated_strings = st.session_state.translations["English"]
+                st.session_state.current_lang = "English"
+    else:
         translated_strings = st.session_state.translations[st.session_state.current_lang]
+else:
+    translated_strings = st.session_state.translations[st.session_state.current_lang]
 
 # --------------------
 # Main UI
