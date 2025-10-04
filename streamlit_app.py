@@ -15,6 +15,9 @@ import google.generativeai as genai
 genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 model = genai.GenerativeModel("gemini-2.5-flash")
 
+# Load the CSV file with NASA publications
+df = pd.read_csv("SB_publication_PMC.csv")  # replace with your file path
+
 # ----------------- Supported Languages -----------------
 LANGUAGES = {
     "English": {"label": "🇺🇸 English (English)", "code": "en"},
@@ -138,7 +141,19 @@ if "translations" not in st.session_state:
     st.session_state.translations = {"English": UI_STRINGS_EN.copy()}
 
 # ----------------- Page Config -----------------
+# Page
 st.set_page_config(page_title="NASA BioSpace Dashboard", layout="wide")
+st.markdown(
+    """
+    <style>
+    body { background-color: #0b3d91; color: white; }
+    .stTextInput>div>div>input { color: black; }
+    a { color: #00ffcc; }
+    .result-card { background-color: #0e2a6b; padding: 12px; border-radius:8px; margin-bottom:10px; }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
 # ----------------- Sidebar -----------------
 with st.sidebar:
@@ -170,7 +185,31 @@ with st.sidebar:
     else:
         translated_strings = st.session_state.translations[st.session_state.current_lang]
 
+
     # PDF upload
+#st.sidebar.success(f"✅ {len(uploaded_files)} PDF(s) uploaded")
+#for uploaded_file in uploaded_files:
+        #pdf_bytes = io.BytesIO(uploaded_file.read())
+        #pdf_reader = PyPDF2.PdfReader(pdf_bytes)
+        #text = ""
+        #for page in pdf_reader.pages:
+            #text += page.extract_text() or ""
+
+    
+        # Summarize each PDF
+        #with st.spinner(f"Summarizing: {uploaded_file.name} ..."):
+            #summary = summarize_text_with_gemini(text)
+#else:
+    #st.sidebar.info("Upload one or more PDF files to get summaries, try again!.")
+
+# THIS IS FOR UPLOADIGN PDF
+uploaded_files = st.sidebar.file_uploader(
+    "Upload one or more PDFs", 
+    type=["pdf"], 
+    accept_multiple_files=True
+)
+
+#if uploaded_files:
 st.sidebar.success(f"✅ {len(uploaded_files)} PDF(s) uploaded")
 for uploaded_file in uploaded_files:
         pdf_bytes = io.BytesIO(uploaded_file.read())
@@ -214,26 +253,62 @@ if uploaded_pdfs:
         st.write(f"Extracted {len(text)} characters from {pdf_file.name}")
 
 # ----------------- Search publications -----------------
-query = st.text_input("Enter keyword to search publications")
-if query and not df.empty:
-    results = df[df["Title"].astype(str).str.contains(query, case=False, na=False)]
+# Center area - search box
+search_col = st.container()
+with search_col:
+    query = st.text_input("Enter keyword to search publications (press Enter):", key="search_box")
+
+if query:
+    # Filter titles case-insensitively
+    mask = df["Title"].astype(str).str.contains(query, case=False, na=False)
+    results = df[mask].reset_index(drop=True)
     st.subheader(f"Results: {len(results)} matching titles")
+    if len(results) == 0:
+        st.info("No matching titles. Try broader keywords or search again!.")
 else:
-    results = pd.DataFrame(columns=df.columns)
+    results = pd.DataFrame(columns=df.columns) 
 
+# SHOWS RESULTS (two-column layout for each result)
 for idx, row in results.iterrows():
-    title = row.get("Title", "No title")
-    link = row.get("Link", "#")
+    title = row["Title"]
+    link = row["Link"]
+    st.markdown(f'<div class="result-card">', unsafe_allow_html=True)
     st.markdown(f"**[{title}]({link})**")
-
-# ----------------- Gemini Input -----------------
-user_input = st.text_input(translated_strings["ask_label"], key="gemini_input")
-if user_input:
-    with st.spinner("Generating..."):
-        resp = model.generate_content(user_input)
-    st.subheader(translated_strings["response_label"])
-    st.write(resp.text)
+    # Buttons: open link
+    cols = st.columns([3,1,1])
+    cols[0].write("")  # SPACER
+    if cols[1].button("🔗 Open", key=f"open_{idx}"):
+        st.markdown(f"[Open in new tab]({link})")
+    if cols[2].button("Gather & Summarize", key=f"summ_{idx}"):
+        with st.spinner("Gathering & extracting content..."):
+            extracted = fetch_url_text(link)
+        if extracted.startswith("ERROR"):
+            st.error(extracted)
+        else:
+            st.success("Content has been succesfully accessed — calling Gemini for summary (this will take a few seconds)...")
+            with st.spinner("Summarizing with Gemini Ai..."):
+                summary = summarize_text_with_gemini(extracted)
+            st.markdown("**AI Summary:**")
+            st.write(summary)
+    st.markdown("</div>", unsafe_allow_html=True)
 
 # ----------------- Button -----------------
 if st.button(translated_strings["click_button"]):
     st.write(translated_strings["button_response"])
+
+# Quick AI chat (uses small context sample)
+st.markdown("---")
+st.header("Chat with AI about the corpus (quick answers)")
+
+q = st.text_input("Ask a question (answers will use the first ~2000 chars of the corpus):", key="chat_box")
+if q:
+    # Build a short context by concatenating first 200 abstracts/titles if available; here we only have titles/links so use top titles
+    corpus_text = " ".join(df["Title"].astype(str).head(200).tolist())[:2000]
+    prompt = f"Use the following corpus context (titles only):\n{corpus_text}\n\nQuestion: {q}\nAnswer concisely."
+    try:
+        model = genai.GenerativeModel(MODEL_NAME)
+        resp = model.generate_content(prompt)
+        st.subheader("Answer:")
+        st.write(resp.text)
+    except Exception as e:
+        st.error("AI chat failed: " + str(e))
