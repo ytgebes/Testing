@@ -84,7 +84,53 @@ def fetch_url_text(url: str) -> str:
         return f"ERROR_FETCH: {str(e)}"
 
     content_type = r.headers.get("Content-Type", "").lower()
+   
+    # PDF
+    if "pdf" in content_type or url.lower().endswith(".pdf"):
+        try:
+            pdf_bytes = io.BytesIO(r.content)
+            reader = PyPDF2.PdfReader(pdf_bytes)
+            text_parts = []
+            for p in reader.pages:
+                txt = p.extract_text()
+                if txt:
+                    text_parts.append(txt)
+            return "\n".join(text_parts) if text_parts else "ERROR_EXTRACT: No text extracted from PDF, try again!"
+        except Exception as e:
+            return f"ERROR_PDF_PARSE: {str(e)}"
+    # HTML
+    else:
+        try:
+            soup = BeautifulSoup(r.text, "html.parser")
+            # Extract visible paragraphs; ignore scripts/styles
+            paragraphs = [p.get_text(separator=" ", strip=True) for p in soup.find_all("p") if p.get_text(strip=True)]
+            # Fallback: get text from body
+            if not paragraphs:
+                body = soup.body
+                if body:
+                    return body.get_text(separator=" ", strip=True)[:20000]
+                return "ERROR_EXTRACT: No paragraph text found"
+            return "\n\n".join(paragraphs)[:20000]  # limit to first 20k chars
+        except Exception as e:
+            return f"ERROR_HTML_PARSE: {str(e)}"
 
+def summarize_text_with_gemini(text: str, max_output_chars: int = 1500) -> str:
+    """Call Gemini to summarize text. Handles short texts and truncates long inputs."""
+    if not text or text.startswith("ERROR"):
+        return text
+    # Keep prompt size reasonable: send first ~6000 chars of text
+    context = text[:6000]
+    prompt = (
+        f"Summarize the following NASA bioscience paper content in clear bullet points and summary.\n\n"
+        f"Content:\n{context}\n\nOutput: first give 3 short bullet points of key findings, then a 2-3 sentence plain summary."
+    )
+    try:
+        model = genai.GenerativeModel(MODEL_NAME)
+        resp = model.generate_content(prompt)
+        return resp.text
+    except Exception as e:
+        return f"ERROR_GEMINI: {str(e)}"
+    
 # ----------------- Session State -----------------
 if "current_lang" not in st.session_state:
     st.session_state.current_lang = "English"
