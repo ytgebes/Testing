@@ -32,10 +32,11 @@ UI_STRINGS_EN = {
     "click_button": "Click here, nothing happens",
     "translate_dataset_checkbox": "Translate dataset column names (may take time)",
     "mention_label": "Official NASA Website",
-    "button_response": "Hooray"
+    "button_response": "Hooray",
+    "about_us": "This dashboard was created to explore NASA bioscience publications dynamically."
 }
 
-# Helper function: extract JSON from model output
+# Helper functions
 def extract_json_from_text(text):
     start = text.find('{')
     end = text.rfind('}')
@@ -43,7 +44,6 @@ def extract_json_from_text(text):
         raise ValueError("No JSON object found in model output.")
     return json.loads(text[start:end+1])
 
-# Helper function: translate dictionary via Gemini
 def translate_dict_via_gemini(source_dict: dict, target_lang_name: str):
     prompt = (
         f"Translate the VALUES of the following JSON object into {target_lang_name}.\n"
@@ -53,7 +53,6 @@ def translate_dict_via_gemini(source_dict: dict, target_lang_name: str):
     resp = model.generate_content(prompt)
     return extract_json_from_text(resp.text)
 
-# Helper function: translate list via Gemini
 def translate_list_via_gemini(items: list, target_lang_name: str):
     prompt = (
         f"Translate this list of short strings into {target_lang_name}. "
@@ -73,36 +72,50 @@ if "current_lang" not in st.session_state:
 if "translations" not in st.session_state:
     st.session_state.translations = {"English": UI_STRINGS_EN.copy()}
 
-# Language selection
-lang_choice = st.selectbox(
-    "🌐 Language",
-    options=list(LANGUAGES.keys()),
-    format_func=lambda x: LANGUAGES[x]["label"],
-    index=list(LANGUAGES.keys()).index(st.session_state.current_lang)
-)
+# --------------------
+# Sidebar / Settings
+# --------------------
+with st.sidebar:
+    st.header("⚙️ Settings")
+    menu_option = st.selectbox("Select an option", ["Languages", "About Us"])
 
-# Handle language translation
-if lang_choice != st.session_state.current_lang:
-    rain(emoji="⏳", font_size=54, falling_speed=5, animation_length=2)
-    with st.spinner(f"Translating UI to {lang_choice}..."):
-        try:
-            if lang_choice in st.session_state.translations:
-                translated_strings = st.session_state.translations[lang_choice]
-            else:
-                translated_strings = translate_dict_via_gemini(
-                    st.session_state.translations["English"],
-                    lang_choice
-                )
-                st.session_state.translations[lang_choice] = translated_strings
-            st.session_state.current_lang = lang_choice
-        except Exception as e:
-            st.error("Translation failed — using English. Error: " + str(e))
-            translated_strings = st.session_state.translations["English"]
-            st.session_state.current_lang = "English"
-else:
-    translated_strings = st.session_state.translations[st.session_state.current_lang]
+    if menu_option == "Languages":
+        lang_choice = st.selectbox(
+            "🌐 Language",
+            options=list(LANGUAGES.keys()),
+            format_func=lambda x: LANGUAGES[x]["label"],
+            index=list(LANGUAGES.keys()).index(st.session_state.current_lang)
+        )
 
-# UI rendering
+        # Handle language translation
+        if lang_choice != st.session_state.current_lang:
+            rain(emoji="⏳", font_size=54, falling_speed=5, animation_length=2)
+            with st.spinner(f"Translating UI to {lang_choice}..."):
+                try:
+                    if lang_choice in st.session_state.translations:
+                        translated_strings = st.session_state.translations[lang_choice]
+                    else:
+                        translated_strings = translate_dict_via_gemini(
+                            st.session_state.translations["English"],
+                            lang_choice
+                        )
+                        st.session_state.translations[lang_choice] = translated_strings
+                    st.session_state.current_lang = lang_choice
+                except Exception as e:
+                    st.error("Translation failed — using English. Error: " + str(e))
+                    translated_strings = st.session_state.translations["English"]
+                    st.session_state.current_lang = "English"
+        else:
+            translated_strings = st.session_state.translations[st.session_state.current_lang]
+
+    elif menu_option == "About Us":
+        st.info(st.session_state.translations[st.session_state.current_lang]["about_us"])
+        # Use English if no translation yet
+        translated_strings = st.session_state.translations[st.session_state.current_lang]
+
+# --------------------
+# Main UI
+# --------------------
 st.title(translated_strings["title"])
 st.write(translated_strings["description"])
 
@@ -112,7 +125,7 @@ mention(
     url="https://www.spaceappschallenge.org/"
 )
 
-# File uploader and dataset translation
+# File uploader
 uploaded_files = st.file_uploader(
     translated_strings["upload_label"],
     accept_multiple_files=True
@@ -123,7 +136,7 @@ if uploaded_files:
     for f in uploaded_files:
         df = pd.read_csv(f)
         original_cols = list(df.columns)
-        if translate_dataset and lang_choice != "English":
+        if translate_dataset and st.session_state.current_lang != "English":
             try:
                 rain(emoji="💡", font_size=40, falling_speed=5, animation_length=2)
                 with st.spinner("Translating column names..."):
