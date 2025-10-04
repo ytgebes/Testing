@@ -34,7 +34,6 @@ LANGUAGES = {
 UI_STRINGS_EN = {
     "title": "Simplified Knowledge",
     "description": "A dynamic dashboard that summarizes NASA bioscience publications and explores impacts and results.",
-    "upload_label": "Upload CSV data",
     "ask_label": "Ask anything:",
     "response_label": "Response:",
     "click_button": "Click here, nothing happens",
@@ -75,28 +74,16 @@ def translate_list_via_gemini(items: list, target_lang_name: str):
     return json.loads(resp.text[start:end+1])
 
 @lru_cache(maxsize=256)
-def fetch_url_text(url):
+def fetch_url_text(url: str) -> str:
+    """Download url and return extracted text (PDF or HTML). Cached in-memory."""
     try:
-        r = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=15)
+        headers = {"User-Agent": "Mozilla/5.0 (compatible; NASA-App/1.0)"}
+        r = requests.get(url, headers=headers, timeout=15)
         r.raise_for_status()
     except Exception as e:
         return f"ERROR_FETCH: {str(e)}"
+
     content_type = r.headers.get("Content-Type", "").lower()
-    if "pdf" in content_type or url.lower().endswith(".pdf"):
-        try:
-            pdf_bytes = io.BytesIO(r.content)
-            reader = PyPDF2.PdfReader(pdf_bytes)
-            text_parts = [p.extract_text() or "" for p in reader.pages]
-            return "\n".join(text_parts)
-        except Exception as e:
-            return f"ERROR_PDF_PARSE: {str(e)}"
-    else:
-        try:
-            soup = BeautifulSoup(r.text, "html.parser")
-            paragraphs = [p.get_text(strip=True) for p in soup.find_all("p") if p.get_text(strip=True)]
-            return "\n\n".join(paragraphs)[:20000] if paragraphs else "ERROR_EXTRACT: No text found"
-        except Exception as e:
-            return f"ERROR_HTML_PARSE: {str(e)}"
 
 # ----------------- Session State -----------------
 if "current_lang" not in st.session_state:
@@ -137,11 +124,20 @@ with st.sidebar:
     else:
         translated_strings = st.session_state.translations[st.session_state.current_lang]
 
-    # CSV upload
-    uploaded_csv = st.file_uploader(translated_strings["upload_label"], type=["csv"])
-
     # PDF upload
-    uploaded_pdfs = st.file_uploader("Upload PDFs", type=["pdf"], accept_multiple_files=True)
+   st.sidebar.success(f"✅ {len(uploaded_files)} PDF(s) uploaded")
+for uploaded_file in uploaded_files:
+        pdf_bytes = io.BytesIO(uploaded_file.read())
+        pdf_reader = PyPDF2.PdfReader(pdf_bytes)
+        text = ""
+        for page in pdf_reader.pages:
+            text += page.extract_text() or ""
+
+        # Summarize each PDF
+        with st.spinner(f"Summarizing: {uploaded_file.name} ..."):
+            summary = summarize_text_with_gemini(text)
+else:
+    st.sidebar.info("Upload one or more PDF files to get summaries, try again!.")
 
 # ----------------- Main UI -----------------
 st.title(translated_strings["title"])
@@ -154,14 +150,7 @@ mention(
 )
 
 # ----------------- Load CSV -----------------
-if uploaded_csv:
-    df = pd.read_csv(uploaded_csv)
-    st.success(f"Loaded {len(df)} rows")
-    st.dataframe(df.head())
-    original_cols = df.columns.tolist()
-else:
-    df = pd.DataFrame()
-    original_cols = []
+df = pd.read_csv("SB_publication_PMC.csv")
 
 # ----------------- Translate dataset -----------------
 translate_dataset = st.checkbox(translated_strings["translate_dataset_checkbox"])
