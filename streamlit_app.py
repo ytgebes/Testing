@@ -109,8 +109,6 @@ st.set_page_config(page_title="NASA BioSpace Dashboard", layout="wide")
 
 # ----------------- Sidebar -----------------
 with st.sidebar:
-    st.header("⚙️ Settings")
-
     # Language selection
     lang_choice = st.selectbox(
         "🌐 Choose language",
