@@ -244,13 +244,13 @@ if translate_dataset and original_cols and st.session_state.current_lang != "Eng
     df.rename(columns=dict(zip(original_cols, translated_cols)), inplace=True)
 
 # ----------------- Extract PDFs -----------------
-if uploaded_pdfs:
-    st.success(f"{len(uploaded_pdfs)} PDF(s) uploaded")
-    for pdf_file in uploaded_pdfs:
-        pdf_bytes = io.BytesIO(pdf_file.read())
-        pdf_reader = PyPDF2.PdfReader(pdf_bytes)
-        text = "".join([p.extract_text() or "" for p in pdf_reader.pages])
-        st.write(f"Extracted {len(text)} characters from {pdf_file.name}")
+#if uploaded_pdfs:
+    #st.success(f"{len(uploaded_pdfs)} PDF(s) uploaded")
+    #for pdf_file in uploaded_pdfs:
+        #pdf_bytes = io.BytesIO(pdf_file.read())
+        #pdf_reader = PyPDF2.PdfReader(pdf_bytes)
+        #text = "".join([p.extract_text() or "" for p in pdf_reader.pages])
+        #st.write(f"Extracted {len(text)} characters from {pdf_file.name}")
 
 # ----------------- Search publications -----------------
 # Center area - search box
