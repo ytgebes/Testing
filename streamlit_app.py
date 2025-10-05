@@ -25,6 +25,26 @@ if 'summary_dict' not in st.session_state:
 # --- STYLING (Main Page) ---
 st.markdown("""
     <style>
+    /* Custom Nav button container for the top-left */
+    .nav-container-ai {
+        display: flex;
+        justify-content: flex-start;
+        padding-top: 1rem; 
+        padding-bottom: 0.5rem;
+    }
+    .nav-button-ai a {
+        background-color: #6A1B9A; /* Purple color */
+        color: white; 
+        padding: 10px 20px;
+        border-radius: 8px; 
+        text-decoration: none; 
+        font-weight: bold;
+        transition: background-color 0.3s ease;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    }
+    .nav-button-ai a:hover { 
+        background-color: #4F0A7B; /* Darker purple on hover */
+    }
     /* HIDE STREAMLIT'S DEFAULT NAVIGATION (Sidebar hamburger menu) */
     [data-testid="stSidebar"] { display: none; }
     
@@ -152,12 +172,12 @@ def summarize_text_with_gemini(text: str):
 
 # --- MAIN PAGE FUNCTION ---
 def search_page():
-    # --- NAVIGATION BUTTON (Custom HTML link) ---
+    # 🟢 FIX: Custom HTML Button for Assistant AI
     st.markdown(
-        '<div class="nav-container"><div class="nav-button"><a href="/Assistant_AI" target="_self">Assistant AI 💬</a></div></div>',
+        '<div class="nav-container-ai"><div class="nav-button-ai"><a href="/Assistant_AI" target="_self">Assistant AI 💬</a></div></div>',
         unsafe_allow_html=True
     )
-    
+        
     # --- UI Header ---
     df = load_data("SB_publication_PMC.csv")
     st.markdown('<h1>Simplified <span style="color: #6A1B9A;">Knowledge</span></h1>', unsafe_allow_html=True)
