@@ -19,38 +19,23 @@ except Exception as e:
     st.stop()
 
 # --- INITIALIZE SESSION STATE ---
-if 'summary_content' not in st.session_state:
-    st.session_state.summary_content = None
-if 'summary_title' not in st.session_state:
-    st.session_state.summary_title = None
-# Added to track which item was clicked
-if 'summary_requested_idx' not in st.session_state:
-    st.session_state.summary_requested_idx = None
+if 'summary_dict' not in st.session_state:
+    st.session_state.summary_dict = {}
 
 # --- STYLING (Main Page) ---
 st.markdown("""
     <style>
-    /* HIDE STREAMLIT'S DEFAULT NAVIGATION */
+    /* HIDE STREAMLIT'S DEFAULT NAVIGATION (Sidebar hamburger menu) */
     [data-testid="stSidebar"] { display: none; }
-    /* REMOVE THIS LINE TO SHOW THE NAVIGATION BUTTONS IF NEEDED LATER */
-    [data-testid="stPageLink"] { display: none; } 
+    
+    /* 🟢 FIX: Remove the hidden page link CSS to make the nav button visible */
+    /* [data-testid="stPageLink"] { display: none; } */ 
 
     /* Push content to the top */
     .block-container { padding-top: 1rem !important; }
-
-    /* Custom Nav button container for the top-left */
-    .nav-container {
-        display: flex;
-        justify-content: flex-start;
-        padding-top: 2rem; 
-        padding-bottom: 2rem;
-    }
-    .nav-button a {
-        background-color: #7B1AF3; color: white; padding: 10px 20px;
-        border-radius: 8px; text-decoration: none; font-weight: bold;
-        transition: background-color 0.3s ease;
-    }
-    .nav-button a:hover { background-color: #5F09C1; }
+    
+    /* Ensure no residual custom nav container is active */
+    .nav-container { display: none; } 
 
     /* Main Theme */
     h1, h3 { text-align: center; }
@@ -60,25 +45,56 @@ st.markdown("""
         color: #000000 !important; background-color: #F0F2F6 !important;
         border: 1px solid #CCCCCC !important; border-radius: 8px; padding: 14px;
     }
+    
+    /* Result Card Styling (Full-Width) */
     .result-card {
-        background-color: #FAFAFA; padding: 1.5rem; border-radius: 10px;
-        margin-bottom: 1rem; border: 1px solid #E0E0E0;
+        background-color: #FAFAFA; 
+        padding: 1.5rem; 
+        border-radius: 10px;
+        margin-bottom: 1.5rem; /* More space between cards for UX */
+        border: 1px solid #E0E0E0;
         box-shadow: 0 2px 4px rgba(0,0,0,0.05);
     }
-    .summary-card {
-        background-color: #E6F0FF; 
-        padding: 2rem; 
-        border-radius: 10px; 
-        margin-top: 2rem;
-        border: 2px solid #6A1B9A;
+    
+    /* Title Styling */
+    .result-card .stMarkdown strong { 
+        font-size: 1.15em; 
+        display: block;
+        margin-bottom: 10px; 
     }
+
+    /* Consistent Purple Link Color */
     a { color: #6A1B9A; text-decoration: none; font-weight: bold; }
     a:hover { text-decoration: underline; }
+    
+    /* Summary Container (The inner block for summary text) */
+    .summary-display {
+        margin-top: 1rem;
+        padding-top: 1rem;
+        border-top: 1px dashed #CCC;
+    }
+    
+    /* BUTTON: Full-width button now replaced with auto-width for single column */
     .stButton>button {
-        border-radius: 8px; width: 100%; background-color: #E6E0FF;
-        color: #4F2083; border: 1px solid #C5B3FF; font-weight: bold;
+        border-radius: 8px; 
+        width: auto; /* Auto width based on content */
+        min-width: 200px; 
+        background-color: #E6E0FF;
+        color: #4F2083; 
+        border: 1px solid #C5B3FF; 
+        font-weight: bold;
+        transition: background-color 0.3s ease;
     }
     .stButton>button:hover { background-color: #D6C9FF; border: 1px solid #B098FF; }
+    
+    /* Ensure Markdown headers in the summary are readable */
+    .summary-display h3 {
+        text-align: left !important;
+        color: #4F2083;
+        margin-top: 15px;
+        margin-bottom: 5px;
+        font-size: 1.3em;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -96,7 +112,6 @@ def load_data(file_path):
 
 @lru_cache(maxsize=128)
 def fetch_url_text(url: str):
-    # ... (Keep this function exactly as it is) ...
     try:
         headers = {"User-Agent": "Mozilla/5.0"}
         r = requests.get(url, headers=headers, timeout=20)
@@ -117,6 +132,7 @@ def fetch_url_text(url: str):
         try:
             soup = BeautifulSoup(r.text, "html.parser")
             for tag in soup(['script', 'style']): tag.decompose()
+            # Truncate content for Gemini model context limit
             return " ".join(soup.body.get_text(separator=" ", strip=True).split())[:25000]
         except Exception as e: 
             return f"ERROR_HTML_PARSE: {e}"
@@ -125,7 +141,7 @@ def summarize_text_with_gemini(text: str):
     if not text or text.startswith("ERROR"): 
         return f"Could not summarize due to a content error: {text.split(': ')[-1]}"
 
-    prompt = (f"Summarize this NASA bioscience paper. Output in clean Markdown with a section titled 'Key Findings' (using bullet points) and a section titled 'Overview Summary' (using a paragraph).\n\nContent:\n{text}")
+    prompt = (f"Summarize this NASA bioscience paper. Output in clean Markdown with a level 3 heading (###) titled 'Key Findings' (using bullet points) and a level 3 heading (###) titled 'Overview Summary' (using a paragraph).\n\nContent:\n{text}")
     
     try:
         model = genai.GenerativeModel(MODEL_NAME)
@@ -136,11 +152,8 @@ def summarize_text_with_gemini(text: str):
 
 # --- MAIN PAGE FUNCTION ---
 def search_page():
-    # --- NAVIGATION BUTTON (Custom HTML link) ---
-    st.markdown(
-        '<div class="nav-container"><div class="nav-button"><a href="/Assistant_AI" target="_self">Assistant AI 💬</a></div></div>',
-        unsafe_allow_html=True
-    )
+    # 🟢 NEW: Assistant AI link is now visible at the top left
+    st.page_link("pages/Assistant_AI.py", label="Assistant AI 💬", icon="💬")
     
     # --- UI Header ---
     df = load_data("SB_publication_PMC.csv")
@@ -159,69 +172,52 @@ def search_page():
         if results_df.empty:
             st.warning("No matching publications found.")
         else:
-            # Only reset summary content/title if a NEW search is performed, otherwise keep it stable
-            if st.session_state.summary_content is not None and st.session_state.summary_requested_idx is not None:
-                # If a button was clicked, we keep the data; otherwise, we clear it for a new search
-                pass
-            else:
-                st.session_state.summary_content = None
-                st.session_state.summary_title = None
-                st.session_state.summary_requested_idx = None
-
-
-            col_list = st.columns(2)
-            col_idx = 0
+            # Clear all session state summary variables to ensure clean display
+            if 'summary_dict' not in st.session_state:
+                 st.session_state.summary_dict = {}
             
+            # SINGLE COLUMN DISPLAY LOOP (Stable)
             for idx, row in results_df.iterrows():
-                current_col = col_list[col_idx % 2]
+                summary_key = f"summary_{idx}"
                 
-                # Check if the current publication is the one that needs summarization
-                is_current_summary = (st.session_state.summary_requested_idx == idx)
-
-                with current_col:
-                    with st.container():
-                        st.markdown(f'<div class="result-card">', unsafe_allow_html=True)
-                        st.markdown(f"**Title:** <a href='{row['Link']}' target='_blank'>{row['Title']}</a>", unsafe_allow_html=True)
+                with st.container():
+                    st.markdown(f'<div class="result-card">', unsafe_allow_html=True)
+                    
+                    # Title
+                    st.markdown(f"**Title:** <a href='{row['Link']}' target='_blank'>{row['Title']}</a>", unsafe_allow_html=True)
+                    
+                    # Button
+                    if st.button("🔬 Gather & Summarize", key=f"btn_summarize_{idx}"):
                         
-                        if st.button("🔬 Gather & Summarize", key=f"summarize_{idx}"):
-                            
-                            # 1. Update state to reflect which item was clicked
-                            st.session_state.summary_title = row['Title']
-                            st.session_state.summary_requested_idx = idx
-                            st.session_state.summary_content = "Loading summary..." # Initial state for spinner
+                        # GENERATE SUMMARY IMMEDIATELY UPON CLICK
+                        with st.spinner(f"Accessing and summarizing: {row['Title']}..."):
+                            try:
+                                text = fetch_url_text(row['Link'])
+                                summary = summarize_text_with_gemini(text)
+                                st.session_state.summary_dict[summary_key] = summary
+                            except Exception as e:
+                                st.session_state.summary_dict[summary_key] = f"CRITICAL_ERROR: {e}"
+                        
+                        # Use rerun to ensure the display updates correctly across the whole page
+                        st.rerun()
 
-                            # 2. Run the heavy lifting
-                            with st.spinner(f"Accessing and summarizing: {row['Title']}..."):
-                                try:
-                                    text = fetch_url_text(row['Link'])
-                                    summary = summarize_text_with_gemini(text)
-                                    st.session_state.summary_content = summary
-                                except Exception as e:
-                                    # Capture any unexpected critical errors
-                                    st.session_state.summary_content = f"CRITICAL_ERROR: {e}"
-
-                            # 3. Rerun the script to display the result outside the column
-                            st.rerun() 
+                    # DISPLAY SUMMARY IF IT EXISTS FOR THIS PUBLICATION
+                    if summary_key in st.session_state.summary_dict:
+                        summary_content = st.session_state.summary_dict[summary_key]
+                        
+                        st.markdown('<div class="summary-display">', unsafe_allow_html=True)
+                        
+                        if summary_content.startswith("ERROR") or summary_content.startswith("CRITICAL_ERROR"):
+                            st.markdown(f"**❌ Failed to Summarize:** *{row['Title']}*", unsafe_allow_html=True)
+                            st.error(f"Error fetching/summarizing content: {summary_content}")
+                        else:
+                            # Display the summary without an extra box, just the clean markdown
+                            st.markdown(summary_content)
                             
-                        st.markdown("</div>", unsafe_allow_html=True)
-                col_idx += 1
+                        st.markdown('</div>', unsafe_allow_html=True)
+                            
+                    st.markdown("</div>", unsafe_allow_html=True) 
     
-    # --- FULL-WIDTH SUMMARY DISPLAY ---
-    # Only display if content exists AND it belongs to a clicked item index
-    if st.session_state.summary_content and st.session_state.summary_requested_idx is not None:
-        
-        st.markdown("---")
-        st.markdown(f'<div class="summary-card">', unsafe_allow_html=True)
-        
-        # Check for errors in the content
-        if st.session_state.summary_content.startswith("ERROR") or st.session_state.summary_content.startswith("CRITICAL_ERROR"):
-            st.markdown(f"## ❌ Failed to Summarize: {st.session_state.summary_title}")
-            st.error(f"Error fetching/summarizing content: {st.session_state.summary_content}")
-        else:
-            st.markdown(f"## 📄 Summary for: {st.session_state.summary_title}")
-            st.markdown(st.session_state.summary_content)
-            
-        st.markdown("</div>", unsafe_allow_html=True)
 
 # --- NAVIGATION SETUP ---
 pg = st.navigation([
