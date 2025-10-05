@@ -28,14 +28,12 @@ st.markdown("""
     /* HIDE STREAMLIT'S DEFAULT NAVIGATION (Sidebar hamburger menu) */
     [data-testid="stSidebar"] { display: none; }
     
-    /* 🟢 FIX: Remove the hidden page link CSS to make the nav button visible */
-    /* [data-testid="stPageLink"] { display: none; } */ 
+    /* 🟢 FIX: REMOVED THE LINE HIDING st.page_link */
+    /* .nav-container and .nav-button styling are now removed as st.page_link handles navigation */
+    .nav-container { display: none; } 
 
     /* Push content to the top */
     .block-container { padding-top: 1rem !important; }
-    
-    /* Ensure no residual custom nav container is active */
-    .nav-container { display: none; } 
 
     /* Main Theme */
     h1, h3 { text-align: center; }
@@ -51,7 +49,7 @@ st.markdown("""
         background-color: #FAFAFA; 
         padding: 1.5rem; 
         border-radius: 10px;
-        margin-bottom: 1.5rem; /* More space between cards for UX */
+        margin-bottom: 1.5rem; 
         border: 1px solid #E0E0E0;
         box-shadow: 0 2px 4px rgba(0,0,0,0.05);
     }
@@ -74,7 +72,7 @@ st.markdown("""
         border-top: 1px dashed #CCC;
     }
     
-    /* BUTTON: Full-width button now replaced with auto-width for single column */
+    /* BUTTON: Styling for the Gather & Summarize button */
     .stButton>button {
         border-radius: 8px; 
         width: auto; /* Auto width based on content */
@@ -152,7 +150,7 @@ def summarize_text_with_gemini(text: str):
 
 # --- MAIN PAGE FUNCTION ---
 def search_page():
-    # 🟢 NEW: Assistant AI link is now visible at the top left
+    # 🟢 FIX: The Assistant AI link should now be visible
     st.page_link("pages/Assistant_AI.py", label="Assistant AI 💬", icon="💬")
     
     # --- UI Header ---
@@ -172,11 +170,10 @@ def search_page():
         if results_df.empty:
             st.warning("No matching publications found.")
         else:
-            # Clear all session state summary variables to ensure clean display
-            if 'summary_dict' not in st.session_state:
-                 st.session_state.summary_dict = {}
+            # Clear all session state summary variables to ensure clean display on new search
+            st.session_state.summary_dict = {}
             
-            # SINGLE COLUMN DISPLAY LOOP (Stable)
+            # SINGLE COLUMN DISPLAY LOOP
             for idx, row in results_df.iterrows():
                 summary_key = f"summary_{idx}"
                 
@@ -218,6 +215,7 @@ def search_page():
                             
                     st.markdown("</div>", unsafe_allow_html=True) 
     
+    # --- NO FULL-WIDTH SUMMARY BOX NEEDED since summaries are inline ---
 
 # --- NAVIGATION SETUP ---
 pg = st.navigation([
