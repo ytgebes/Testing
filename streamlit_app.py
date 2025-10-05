@@ -6,17 +6,42 @@ from bs4 import BeautifulSoup
 import PyPDF2
 from functools import lru_cache
 import google.generativeai as genai
+from streamlit_extras.let_it_rain import rain # Assuming you need this for the rain effect
 
 # --- CONFIGURATION ---
 st.set_page_config(page_title="Simplified Knowledge", layout="wide")
 
 try:
     # Use st.secrets for security in deployment
-    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+    GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
+    genai.configure(api_key=GEMINI_API_KEY)
     MODEL_NAME = "gemini-2.5-flash"
+    DATA_FILE = "SB_publication_PMC.csv"
+    # Placeholder for UI strings that should be in a global scope for translation logic
+    UI_STRINGS_EN = {
+        "title": "Simplified Knowledge",
+        "description": "Search, Discover, and Summarize NASA's Bioscience Publications",
+        "search_placeholder": "e.g., microgravity, radiation, Artemis...",
+        # Add any other strings used in your main page here
+    }
 except Exception as e:
-    st.error(f"Error configuring Gemini AI: {e}")
+    st.error(f"Error configuring AI or defining constants: {e}")
     st.stop()
+
+# --- LANGUAGES DICTIONARY (MUST BE DEFINED HERE) ---
+LANGUAGES = {
+    "English": {"label": "English (English)", "code": "en"},
+    "Türkçe": {"label": "Türkçe (Turkish)", "code": "tr"},
+    "Français": {"label": "Français (French)", "code": "fr"},
+    "Español": {"label": "Español (Spanish)", "code": "es"},
+    "Deutsch": {"label": "Deutsch (German)", "code": "de"},
+    "Русский": {"label": "Русский (Russian)", "code": "ru"},
+    "日本語": {"label": "日本語 (Japanese)", "code": "ja"},
+    "한국어": {"label": "한국어 (Korean)", "code": "ko"},
+    "हिन्दी": {"label": "हिन्दी (Hindi)", "code": "hi"},
+    "العربية": {"label": "العربية (Arabic)", "code": "ar"},
+    # ... (Include all your other languages here) ...
+}
 
 # --- INITIALIZE SESSION STATE ---
 if 'summary_dict' not in st.session_state:
@@ -25,20 +50,36 @@ if "current_lang" not in st.session_state:
     st.session_state.current_lang = "English"
 if "translations" not in st.session_state:
     st.session_state.translations = {"English": UI_STRINGS_EN.copy()}
+if 'last_query' not in st.session_state:
+    st.session_state.last_query = ""
+
 
 # --- STYLING (Main Page) ---
 st.markdown("""
     <style>
-    /* Custom Nav button container for the top-left */
+    /* HIDE STREAMLIT'S DEFAULT NAVIGATION AND SIDEBAR COMPLETELY */
+    [data-testid="stSidebar"], [data-testid="stNavigation"] { display: none; }
+    
+    /* NEW: Custom Nav buttons container for the top-left */
+    /* This uses flexbox to hold both custom buttons */
     .nav-container-ai {
         display: flex;
-        justify-content: flex-start;
+        justify-content: space-between; /* Space out the nav links and the language dropdown */
+        align-items: center;
         padding-top: 3rem; 
         padding-bottom: 0rem;
+        margin-bottom: 2rem; /* Add space below the whole top block */
     }
-    .nav-button-ai a {
+    
+    /* Container for the two custom buttons (left side) */
+    .nav-buttons-left {
+        display: flex;
+        gap: 15px; /* Space between the two custom buttons */
+    }
+
+    .nav-button-style a {
         background-color: #6A1B9A; /* Purple color */
-        color: white; 
+        color: white !important; 
         padding: 10px 20px;
         border-radius: 8px; 
         text-decoration: none; 
@@ -46,21 +87,18 @@ st.markdown("""
         transition: background-color 0.3s ease;
         box-shadow: 0 2px 4px rgba(0,0,0,0.2);
     }
-    .nav-button-ai a:hover { 
+    .nav-button-style a:hover { 
         background-color: #4F0A7B; /* Darker purple on hover */
     }
-    /* HIDE STREAMLIT'S DEFAULT NAVIGATION (Sidebar hamburger menu) */
-    [data-testid="stSidebar"] { display: none; }
     
-    /* 🟢 FIX: Remove the hidden page link CSS to make the nav button visible */
-    /* [data-testid="stPageLink"] { display: none; } */ 
-
+    /* Adjust Streamlit's selectbox to be cleaner for the language dropdown */
+    [data-testid="stFormSubmitButton"] {
+        width: 100%;
+    }
+    
     /* Push content to the top */
     .block-container { padding-top: 1rem !important; }
     
-    /* Ensure no residual custom nav container is active */
-    .nav-container { display: none; } 
-
     /* Main Theme */
     h1, h3 { text-align: center; }
     h1 { font-size: 4.5em !important; padding-bottom: 0.5rem; color: #000000; }
@@ -70,38 +108,18 @@ st.markdown("""
         border: 1px solid #CCCCCC !important; border-radius: 8px; padding: 14px;
     }
     
-    /* Result Card Styling (Full-Width) */
+    /* Result Card Styling */
     .result-card {
         background-color: #FAFAFA; 
         padding: 1.5rem; 
         border-radius: 10px;
-        margin-bottom: 1.5rem; /* More space between cards for UX */
+        margin-bottom: 1.5rem; 
         border: 1px solid #E0E0E0;
         box-shadow: 0 2px 4px rgba(0,0,0,0.05);
     }
-    
-    /* Title Styling */
-    .result-card .stMarkdown strong { 
-        font-size: 1.15em; 
-        display: block;
-        margin-bottom: 10px; 
-    }
-
-    /* Consistent Purple Link Color */
-    a { color: #6A1B9A; text-decoration: none; font-weight: bold; }
-    a:hover { text-decoration: underline; }
-    
-    /* Summary Container (The inner block for summary text) */
-    .summary-display {
-        margin-top: 1rem;
-        padding-top: 1rem;
-        border-top: 1px dashed #CCC;
-    }
-    
-    /* BUTTON: Full-width button now replaced with auto-width for single column */
     .stButton>button {
         border-radius: 8px; 
-        width: auto; /* Auto width based on content */
+        width: auto; 
         min-width: 200px; 
         background-color: #E6E0FF;
         color: #4F2083; 
@@ -110,8 +128,13 @@ st.markdown("""
         transition: background-color 0.3s ease;
     }
     .stButton>button:hover { background-color: #D6C9FF; border: 1px solid #B098FF; }
-    
-    /* Ensure Markdown headers in the summary are readable */
+
+    /* Summary Display Styling */
+    .summary-display {
+        margin-top: 1rem;
+        padding-top: 1rem;
+        border-top: 1px dashed #CCC;
+    }
     .summary-display h3 {
         text-align: left !important;
         color: #4F2083;
@@ -122,9 +145,11 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- HELPER FUNCTIONS ---
+# --- HELPER FUNCTIONS (UNCHANGED) ---
+
 @st.cache_data
 def load_data(file_path): 
+    # ... (function body unchanged) ...
     try:
         return pd.read_csv(file_path)
     except FileNotFoundError:
@@ -133,6 +158,7 @@ def load_data(file_path):
     except Exception as e:
         st.error(f"Error loading data: {e}")
         st.stop()
+        
 def extract_json_from_text(text):
     start = text.find('{')
     end = text.rfind('}')
@@ -141,6 +167,7 @@ def extract_json_from_text(text):
     return json.loads(text[start:end+1])
 
 def translate_dict_via_gemini(source_dict: dict, target_lang_name: str):
+    model = genai.GenerativeModel(MODEL_NAME)
     prompt = (
         f"Translate the VALUES of the following JSON object into {target_lang_name}.\n"
         "Return ONLY a JSON object with the same keys and translated values (no commentary).\n"
@@ -150,6 +177,7 @@ def translate_dict_via_gemini(source_dict: dict, target_lang_name: str):
     return extract_json_from_text(resp.text)
 
 def translate_list_via_gemini(items: list, target_lang_name: str):
+    model = genai.GenerativeModel(MODEL_NAME)
     prompt = (
         f"Translate this list of short strings into {target_lang_name}. "
         f"Return a JSON array of translated strings in the same order.\n"
@@ -164,6 +192,7 @@ def translate_list_via_gemini(items: list, target_lang_name: str):
 
 @lru_cache(maxsize=128)
 def fetch_url_text(url: str):
+    # ... (function body unchanged) ...
     try:
         headers = {"User-Agent": "Mozilla/5.0"}
         r = requests.get(url, headers=headers, timeout=20)
@@ -184,12 +213,12 @@ def fetch_url_text(url: str):
         try:
             soup = BeautifulSoup(r.text, "html.parser")
             for tag in soup(['script', 'style']): tag.decompose()
-            # Truncate content for Gemini model context limit
             return " ".join(soup.body.get_text(separator=" ", strip=True).split())[:25000]
         except Exception as e: 
             return f"ERROR_HTML_PARSE: {e}"
 
 def summarize_text_with_gemini(text: str):
+    # ... (function body unchanged) ...
     if not text or text.startswith("ERROR"): 
         return f"Could not summarize due to a content error: {text.split(': ')[-1]}"
 
@@ -202,23 +231,75 @@ def summarize_text_with_gemini(text: str):
     except Exception as e: 
         return f"ERROR_GEMINI: {e}"
 
+
 # --- MAIN PAGE FUNCTION ---
 def search_page():
-    # 🟢 FIX: Custom HTML Button for Assistant AI
-    st.markdown(
-        '<div class="nav-container-ai"><div class="nav-button-ai"><a href="/Assistant_AI" target="_self">Assistant AI 💬</a></div></div>',
-        unsafe_allow_html=True
-    )
-        
-    # --- UI Header ---
-    df = load_data("SB_publication_PMC.csv")
-    st.markdown('<h1>Simplified <span style="color: #6A1B9A;">Knowledge</span></h1>', unsafe_allow_html=True)
-    st.markdown("### Search, Discover, and Summarize NASA's Bioscience Publications")
+    
+    # --- TOP NAVIGATION BAR (HTML Buttons and Language Dropdown) ---
+    st.markdown("""
+        <div class="nav-container-ai">
+            <div class="nav-buttons-left">
+                <div class="nav-button-style">
+                    <a href="/Assistant_AI" target="_self">Assistant AI 💬</a>
+                </div>
+                <div class="nav-button-style">
+                    <a href="/Translator" target="_self">Language Translator 🌎</a>
+                </div>
+            </div>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    # --- LANGUAGE SELECTION (Top Right of Main Content Area) ---
+    # The columns must be placed AFTER the custom HTML for visual placement
+    lang_spacer_col, lang_select_col = st.columns([5, 1.5]) 
 
-    search_query = st.text_input("Search publications...", placeholder="e.g., microgravity, radiation, Artemis...", label_visibility="collapsed")
+    with lang_select_col:
+        lang_choice = st.selectbox(
+            "🌐 Choose language",
+            options=list(LANGUAGES.keys()),
+            format_func=lambda x: LANGUAGES[x]["label"],
+            index=list(LANGUAGES.keys()).index(st.session_state.current_lang),
+            label_visibility="collapsed" # Hide the label, use the globe icon
+        )
+
+    # --- Translation Logic (Must run immediately after selection) ---
+    global translated_strings
+    if lang_choice != st.session_state.current_lang:
+        rain(emoji="⏳", font_size=54, falling_speed=5, animation_length=2)
+        with st.spinner(f"Translating UI to {lang_choice}..."):
+            try:
+                if lang_choice in st.session_state.translations:
+                    translated_strings = st.session_state.translations[lang_choice]
+                else:
+                    translated_strings = translate_dict_via_gemini(
+                        st.session_state.translations["English"],
+                        lang_choice
+                    )
+                    st.session_state.translations[lang_choice] = translated_strings
+                st.session_state.current_lang = lang_choice
+            except Exception as e:
+                st.error("Translation failed — using English. Error: " + str(e))
+                translated_strings = st.session_state.translations["English"]
+                st.session_state.current_lang = "English"
+        st.rerun() # Rerun to apply translation strings immediately
+    else:
+        # Load current translated strings
+        translated_strings = st.session_state.translations[st.session_state.current_lang]
+        
+    # --- UI Header (Using translated strings) ---
+    st.markdown(f"<h1>{translated_strings.get('title', 'Simplified Knowledge')}</h1>", unsafe_allow_html=True)
+    st.markdown(f"### {translated_strings.get('description', 'Search, Discover, and Summarize NASA\'s Bioscience Publications')}")
+
+    search_query = st.text_input(
+        "Search publications...", 
+        placeholder=translated_strings.get('search_placeholder', "e.g., microgravity, radiation, Artemis..."), 
+        label_visibility="collapsed"
+    )
     
     # --- Search Logic ---
+    df = load_data(DATA_FILE)
     if search_query:
+        # The rest of your search logic remains here... (omitted for brevity)
         mask = df["Title"].astype(str).str.contains(search_query, case=False, na=False)
         results_df = df[mask].reset_index(drop=True)
         st.markdown("---")
@@ -227,24 +308,18 @@ def search_page():
         if results_df.empty:
             st.warning("No matching publications found.")
         else:
-            # Clear all session state summary variables to ensure clean display
-            if 'summary_dict' not in st.session_state:
-                 st.session_state.summary_dict = {}
-            
-            # SINGLE COLUMN DISPLAY LOOP (Stable)
+            if st.session_state.get('last_query') != search_query:
+                st.session_state.summary_dict = {}
+                st.session_state.last_query = search_query
+
             for idx, row in results_df.iterrows():
                 summary_key = f"summary_{idx}"
                 
                 with st.container():
                     st.markdown(f'<div class="result-card">', unsafe_allow_html=True)
-                    
-                    # Title
                     st.markdown(f"**Title:** <a href='{row['Link']}' target='_blank'>{row['Title']}</a>", unsafe_allow_html=True)
                     
-                    # Button
                     if st.button("🔬 Gather & Summarize", key=f"btn_summarize_{idx}"):
-                        
-                        # GENERATE SUMMARY IMMEDIATELY UPON CLICK
                         with st.spinner(f"Accessing and summarizing: {row['Title']}..."):
                             try:
                                 text = fetch_url_text(row['Link'])
@@ -252,143 +327,24 @@ def search_page():
                                 st.session_state.summary_dict[summary_key] = summary
                             except Exception as e:
                                 st.session_state.summary_dict[summary_key] = f"CRITICAL_ERROR: {e}"
-                        
-                        # Use rerun to ensure the display updates correctly across the whole page
                         st.rerun()
 
-                    # DISPLAY SUMMARY IF IT EXISTS FOR THIS PUBLICATION
                     if summary_key in st.session_state.summary_dict:
                         summary_content = st.session_state.summary_dict[summary_key]
-                        
                         st.markdown('<div class="summary-display">', unsafe_allow_html=True)
-                        
                         if summary_content.startswith("ERROR") or summary_content.startswith("CRITICAL_ERROR"):
                             st.markdown(f"**❌ Failed to Summarize:** *{row['Title']}*", unsafe_allow_html=True)
                             st.error(f"Error fetching/summarizing content: {summary_content}")
                         else:
-                            # Display the summary without an extra box, just the clean markdown
                             st.markdown(summary_content)
-                            
                         st.markdown('</div>', unsafe_allow_html=True)
                             
                     st.markdown("</div>", unsafe_allow_html=True) 
     
 
-# --- NAVIGATION SETUP ---
-pg = st.navigation([
-    st.Page(search_page, title="Simplified Knowledge 🔍"),
-    st.Page("pages/Assistant_AI.py", title="Assistant AI 💬", icon="💬"),
-])
+# --- APPLICATION ENTRY POINT ---
 
-pg.run()    
-
-_, lang_col = st.columns([5, 1.5]) 
-
-#LANGUAGE
-with lang_col:
-    # Language selection dropdown (selectbox)
-    lang_choice = st.selectbox(
-        "🌐 Choose language",
-        options=list(LANGUAGES.keys()),
-        format_func=lambda x: LANGUAGES[x]["label"],
-        index=list(LANGUAGES.keys()).index(st.session_state.current_lang),
-        label_visibility="visible" # Ensure the label is visible outside the compact sidebar
-    )
-
-# --- Translation Logic (Immediately follows the selectbox creation) ---
-if lang_choice != st.session_state.current_lang:
-    # rain() and st.spinner() are kept, but the spinner will now appear on the main page.
-    rain(emoji="⏳", font_size=54, falling_speed=5, animation_length=2)
-    with st.spinner(f"Translating UI to {lang_choice}..."):
-        try:
-            if lang_choice in st.session_state.translations:
-                translated_strings = st.session_state.translations[lang_choice]
-            else:
-                translated_strings = translate_dict_via_gemini(
-                    st.session_state.translations["English"],
-                    lang_choice
-                )
-                st.session_state.translations[lang_choice] = translated_strings
-            st.session_state.current_lang = lang_choice
-        except Exception as e:
-            st.error("Translation failed — using English. Error: " + str(e))
-            # Fallback to English
-            translated_strings = st.session_state.translations["English"]
-            st.session_state.current_lang = "English"
-else:
-    translated_strings = st.session_state.translations[st.session_state.current_lang]
-
-# --- PDF UPLOAD (Must be handled separately now that the main sidebar block is gone) ---
-# The PDF upload functionality that was in the sidebar needs a new home.
-# We will put it back in the sidebar for tidiness, but without the translation logic.
-with st.sidebar:
-    st.markdown("<h3 style='margin: 0; padding: 0;'>Upload PDFs to Summarize</h3>", unsafe_allow_html=True)
-    uploaded_files = st.file_uploader(label="", type=["pdf"], accept_multiple_files=True)
-    # The code that *uses* uploaded_files stays in the main area below.
-
-# Languages
-LANGUAGES = {
-    "English": {"label": "English (English)", "code": "en"},
-    "Türkçe": {"label": "Türkçe (Turkish)", "code": "tr"},
-    "Français": {"label": "Français (French)", "code": "fr"},
-    "Español": {"label": "Español (Spanish)", "code": "es"},
-    "Afrikaans": {"label": "Afrikaans (Afrikaans)", "code": "af"},
-    "العربية": {"label": "العربية (Arabic)", "code": "ar"},
-    "Tiếng Việt": {"label": "Tiếng Việt (Vietnamese)", "code": "vi"},
-    "isiXhosa": {"label": "isiXhosa (Xhosa)", "code": "xh"},
-    "ייִדיש": {"label": "ייִדיש (Yiddish)", "code": "yi"},
-    "Yorùbá": {"label": "Yorùbá (Yoruba)", "code": "yo"},
-    "isiZulu": {"label": "isiZulu (Zulu)", "code": "zu"},
-    "Deutsch": {"label": "Deutsch (German)", "code": "de"},
-    "Italiano": {"label": "Italiano (Italian)", "code": "it"},
-    "Русский": {"label": "Русский (Russian)", "code": "ru"},
-    "日本語": {"label": "日本語 (Japanese)", "code": "ja"},
-    "한국어": {"label": "한국어 (Korean)", "code": "ko"},
-    "Polski": {"label": "Polski (Polish)", "code": "pl"},
-    "Nederlands": {"label": "Nederlands (Dutch)", "code": "nl"},
-    "Svenska": {"label": "Svenska (Swedish)", "code": "sv"},
-    "Dansk": {"label": "Dansk (Danish)", "code": "da"},
-    "Norsk": {"label": "Norsk (Norwegian)", "code": "no"},
-    "Suomi": {"label": "Suomi (Finnish)", "code": "fi"},
-    "हिन्दी": {"label": "हिन्दी (Hindi)", "code": "hi"},
-    "বাংলা": {"label": "বাংলা (Bengali)", "code": "bn"},
-    "ગુજરાતી": {"label": "ગુજરાતી (Gujarati)", "code": "gu"},
-    "ಕನ್ನಡ": {"label": "ಕನ್ನಡ (Kannada)", "code": "kn"},
-    "മലയാളം": {"label": "മലയാളം (Malayalam)", "code": "ml"},
-    "मराठी": {"label": "मराठी (Marathi)", "code": "mr"},
-    "ਪੰਜਾਬੀ": {"label": "ਪੰਜਾਬੀ (Punjabi)", "code": "pa"},
-    "தமிழ்": {"label": "தமிழ் (Tamil)", "code": "ta"},
-    "తెలుగు": {"label": "తెలుగు (Telugu)", "code": "te"},
-    "Odia": {"label": "Odia (Odia)", "code": "or"},
-    "עברית": {"label": "עברית (Hebrew)", "code": "he"},
-    "فارسی": {"label": "فارسی (Persian)", "code": "fa"},
-    "ไทย": {"label": "ไทย (Thai)", "code": "th"},
-    "Bahasa Indonesia": {"label": "Bahasa Indonesia (Indonesian)", "code": "id"},
-    "Malay": {"label": "Malay (Malay)", "code": "ms"},
-    "Shqip": {"label": "Shqip (Albanian)", "code": "sq"},
-    "Azərbaycan": {"label": "Azərbaycan (Azerbaijani)", "code": "az"},
-    "Беларуская": {"label": "Беларуская (Belarusian)", "code": "be"},
-    "Bosanski": {"label": "Bosanski (Bosnian)", "code": "bs"},
-    "Български": {"label": "Български (Bulgarian)", "code": "bg"},
-    "Hrvatski": {"label": "Hrvatski (Croatian)", "code": "hr"},
-    "Čeština": {"label": "Čeština (Czech)", "code": "cs"},
-    "Ελληνικά": {"label": "Ελληνικά (Greek)", "code": "el"},
-    "Eesti": {"label": "Eesti (Estonian)", "code": "et"},
-    "Latviešu": {"label": "Latviešu (Latvian)", "code": "lv"},
-    "Lietuvių": {"label": "Lietuvių (Lithuanian)", "code": "lt"},
-    "Magyar": {"label": "Magyar (Hungarian)", "code": "hu"},
-    "Slovenčina": {"label": "Slovenčina (Slovak)", "code": "sk"},
-    "Slovenščina": {"label": "Slovenščina (Slovenian)", "code": "sl"},
-    "ქართული": {"label": "ქართული (Georgian)", "code": "ka"},
-    "Հայերեն": {"label": "Հայերեն (Armenian)", "code": "hy"},
-    "Қазақша": {"label": "Қазақша (Kazakh)", "code": "kk"},
-    "Кыргызча": {"label": "Кыргызча (Kyrgyz)", "code": "ky"},
-    "Монгол": {"label": "Монгол (Mongolian)", "code": "mn"},
-    "Српски": {"label": "Српски (Serbian)", "code": "sr"},
-    "Словенски": {"label": "Словенски (Slovene)", "code": "sl"},
-    "தமிழ்": {"label": "தமிழ் (Tamil)", "code": "ta"},
-    "ગુજરાતી": {"label": "ગુજરાતી (Gujarati)", "code": "gu"},
-    "हिन्दी": {"label": "हिन्दी (Hindi)", "code": "hi"},
-}
-
-
+# Remove the st.navigation and pg.run() blocks
+# This function is now the entry point for this single-page app
+if __name__ == "__main__":
+    search_page()
