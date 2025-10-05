@@ -2,57 +2,55 @@ import streamlit as st
 import pandas as pd
 import google.generativeai as genai
 
-# --- CONFIGURATION & INITIALIZATION ---
-
-st.set_page_config(
-    page_title="NASA AI Chat Assistant",
-    page_icon="🔬",
-    layout="centered"
-)
+# --- CONFIGURATION ---
+st.set_page_config(page_title="NASA AI Chat Assistant", page_icon="🔬", layout="wide")
 
 try:
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-    MODEL_NAME = "gemini-2.5-flash"
+    MODEL_NAME = "gemini-1.5-flash"
 except Exception as e:
     st.error(f"Error configuring Gemini AI: {e}")
     st.stop()
 
-# --- STYLING (MATCHES MAIN PAGE) ---
-
+# --- STYLING (WITH NEW NAV BUTTON) ---
 st.markdown("""
     <style>
-    /* HIDE STREAMLIT'S DEFAULT NAVIGATION BAR */
+    /* HIDE STREAMLIT'S DEFAULT NAVIGATION */
     [data-testid="stSidebar"] {
         display: none;
     }
-    /* NEW THEME: White Background */
-    body {
-        background-color: #FFFFFF;
-        color: #333333; /* Dark grey for main text */
+    
+    /* NEW: STYLED NAVIGATION BUTTON CONTAINER */
+    .nav-container {
+        display: flex;
+        justify-content: flex-end;
     }
-    h1 {
-        color: #000000; /* Black for title */
-    }
-    /* Input Box */
-    .stTextInput>div>div>input {
-        color: #000000 !important;
-        background-color: #F0F2F6 !important;
-    }
-    /* Link */
-     a {
-        color: #6A1B9A;
+    .nav-button a {
+        background-color: #6c757d; /* Grey for back button */
+        color: white;
+        padding: 10px 20px;
+        border-radius: 8px;
         text-decoration: none;
         font-weight: bold;
+        transition: background-color 0.3s ease;
     }
-    a:hover {
-        text-decoration: underline;
+    .nav-button a:hover {
+        background-color: #5a6268; /* Darker grey on hover */
     }
+
+    /* Main Theme */
+    body { background-color: #FFFFFF; color: #333333; }
+    h1 { color: #000000; }
+    .stTextInput>div>div>input { color: #000000 !important; background-color: #F0F2F6 !important; }
+    a { color: #6A1B9A; text-decoration: none; font-weight: bold; }
     </style>
 """, unsafe_allow_html=True)
 
-# --- NAVIGATION LINK ---
-st.markdown("[⬅️ Back to Search](/)", unsafe_allow_html=True)
-
+# --- NEW NAVIGATION BUTTON ---
+st.markdown(
+    '<div class="nav-container"><div class="nav-button"><a href="/" target="_self">⬅️ Back to Search</a></div></div>',
+    unsafe_allow_html=True
+)
 
 # --- HELPER FUNCTIONS ---
 @st.cache_data
@@ -70,51 +68,52 @@ def find_relevant_publications(query, df, top_k=5):
     return pd.DataFrame()
 
 # --- MAIN PAGE UI & LOGIC ---
-
 st.title("🔬 AI Chat Assistant")
-st.markdown("Ask me anything about the **608 NASA bioscience publications**.")
+st.markdown("<p style='text-align: center;'>Ask me anything about the <strong>608 NASA bioscience publications</strong>.</p>", unsafe_allow_html=True)
 
-df = load_data("SB_publication_PMC.csv")
+# Use columns to center the chat interface
+_, col2, _ = st.columns([1, 2, 1])
 
-if "messages" not in st.session_state:
-    st.session_state.messages = []
+with col2:
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
 
-for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
-        st.markdown(message["content"])
+    for message in st.session_state.messages:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
 
-if prompt := st.chat_input("What would you like to know?"):
-    st.session_state.messages.append({"role": "user", "content": prompt})
-    with st.chat_message("user"):
-        st.markdown(prompt)
+    if prompt := st.chat_input("What would you like to know?"):
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        with st.chat_message("user"):
+            st.markdown(prompt)
 
-    with st.chat_message("assistant"):
-        placeholder = st.empty()
-        with st.spinner("Searching publications and formulating answer..."):
-            relevant_pubs = find_relevant_publications(prompt, df)
-            
-            context_str = "No specific publications found for this query."
-            if not relevant_pubs.empty:
-                context_str = "Based on the following relevant publications:\n"
-                for _, row in relevant_pubs.iterrows():
-                    context_str += f"- **Title:** {row['Title']}\n"
-            
-            full_prompt = (
-                "You are a specialized AI assistant for NASA's bioscience research. "
-                "Answer the user's question based *only* on the context provided below. "
-                "If the context is insufficient, state that you cannot find the answer in the provided publications. "
-                "Cite the titles of papers you reference.\n\n"
-                f"--- CONTEXT ---\n{context_str}\n\n"
-                f"--- USER'S QUESTION ---\n{prompt}"
-            )
-            
-            try:
-                model = genai.GenerativeModel(MODEL_NAME)
-                response = model.generate_content(full_prompt)
-                ai_response = response.text
-            except Exception as e:
-                ai_response = f"Sorry, an error occurred: {e}"
-            
-            placeholder.markdown(ai_response)
-    
-    st.session_state.messages.append({"role": "assistant", "content": ai_response})
+        with st.chat_message("assistant"):
+            placeholder = st.empty()
+            with st.spinner("Searching publications and formulating answer..."):
+                relevant_pubs = find_relevant_publications(prompt, df)
+                
+                context_str = "No specific publications found for this query."
+                if not relevant_pubs.empty:
+                    context_str = "Based on the following relevant publications:\n"
+                    for _, row in relevant_pubs.iterrows():
+                        context_str += f"- **Title:** {row['Title']}\n"
+                
+                full_prompt = (
+                    "You are a specialized AI assistant for NASA's bioscience research. "
+                    "Answer the user's question based *only* on the context provided below. "
+                    "If the context is insufficient, state that you cannot find the answer. "
+                    "Cite the titles of papers you reference.\n\n"
+                    f"--- CONTEXT ---\n{context_str}\n\n"
+                    f"--- USER'S QUESTION ---\n{prompt}"
+                )
+                
+                try:
+                    model = genai.GenerativeModel(MODEL_NAME)
+                    response = model.generate_content(full_prompt)
+                    ai_response = response.text
+                except Exception as e:
+                    ai_response = f"Sorry, an error occurred: {e}"
+                
+                placeholder.markdown(ai_response)
+        
+        st.session_state.messages.append({"role": "assistant", "content": ai_response})
