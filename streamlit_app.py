@@ -341,10 +341,6 @@ for idx, row in results.iterrows():
             st.write(summary)
     st.markdown("</div>", unsafe_allow_html=True)
 
-# ----------------- Button -----------------
-if st.button(translated_strings["click_button"]):
-    st.write(translated_strings["button_response"])
-
 # Quick AI chat (uses small context sample)
 st.markdown("---")
 st.header("Chat with AI for quick answers!")
