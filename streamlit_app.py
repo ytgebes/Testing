@@ -247,10 +247,6 @@ st.markdown('</div>', unsafe_allow_html=True)
 # Get the language code
 selected_language_code = LANGUAGES[selected_language_name]
 
-# Example Content
-st.header("Main Content Area 📄")
-st.write("This is the main body of your Streamlit application, which now flows beneath the floating language selector in the top-right corner.")
-
 # --- HELPER FUNCTIONS (Copied from original) ---
 @st.cache_data
 def load_data(file_path): 
