@@ -90,10 +90,8 @@ UI_STRINGS_EN = {
     "description": "A dynamic dashboard that summarizes NASA bioscience publications and explores impacts and results.",
     "ask_label": "Ask anything:",
     "response_label": "Response:",
-    "click_button": "Click here, nothing happens",
     "translate_dataset_checkbox": "Translate dataset column names (may take time)",
     "mention_label": "Official NASA Website",
-    "button_response": "Hooray",
     "about_us": "This dashboard explores NASA bioscience publications dynamically."
 }
 
@@ -357,7 +355,7 @@ if q:
     corpus_text = " ".join(df["Title"].astype(str).head(200).tolist())[:2000]
     prompt = f"Use the following corpus context (titles only):\n{corpus_text}\n\nQuestion: {q}\nAnswer concisely."
     try:
-        model = genai.GenerativeModel(gemini-2.5-flash)
+        model = genai.GenerativeModel(MODEL_NAME)
         resp = model.generate_content(prompt)
         st.subheader("Answer:")
         st.write(resp.text)
