@@ -39,12 +39,24 @@ st.markdown("""
         color: #000000 !important; background-color: #F0F2F6 !important;
         border: 1px solid #CCCCCC !important; border-radius: 8px; padding: 14px;
     }
-    /* RESULT CARD: Remains the same, now takes full width */
+    
+    /* Result Card Styling */
     .result-card {
-        background-color: #FAFAFA; padding: 1.5rem; border-radius: 10px;
-        margin-bottom: 1rem; border: 1px solid #E0E0E0;
+        background-color: #FAFAFA; 
+        padding: 1.5rem; 
+        border-radius: 10px;
+        margin-bottom: 1rem; 
+        border: 1px solid #E0E0E0;
         box-shadow: 0 2px 4px rgba(0,0,0,0.05);
     }
+    
+    /* 🟢 FIX 1: Increase Title Font Size */
+    .result-card a { 
+        font-size: 1.15em; 
+        display: block; /* Makes the whole link block level for better spacing */
+        margin-bottom: 10px; /* Space below title */
+    }
+
     .summary-card { 
         background-color: #E6F0FF; 
         padding: 2rem; 
@@ -52,20 +64,26 @@ st.markdown("""
         margin-top: 2rem;
         border: 2px solid #6A1B9A;
     }
+    
+    /* Consistent Purple Link Color */
     a { color: #6A1B9A; text-decoration: none; font-weight: bold; }
     a:hover { text-decoration: underline; }
-    /* BUTTON: Uses a smaller width in single column */
+    
+    /* BUTTON: Now uses a smaller width in single column and aligns left */
     .stButton>button {
         border-radius: 8px; 
-        width: 50%; 
-        min-width: 250px; 
+        width: auto; /* Allow button to size to content */
+        min-width: 200px; /* Ensure a minimum size */
         background-color: #E6E0FF;
         color: #4F2083; border: 1px solid #C5B3FF; font-weight: bold;
+        /* Align button to the left within the card */
+        display: block; 
     }
     .stButton>button:hover { background-color: #D6C9FF; border: 1px solid #B098FF; }
+    
     /* Summary text inside the card */
     .summary-display {
-        background-color: #FFF; /* Use white background inside the result card */
+        background-color: #FFF; 
         padding: 1rem; 
         border-radius: 8px;
         border: 1px solid #CCC;
@@ -130,7 +148,7 @@ def summarize_text_with_gemini(text: str):
 
 # --- MAIN PAGE FUNCTION ---
 def search_page():
-    # --- NAVIGATION LINK ---
+    # 🟢 FIX 3: Ensure the Assistant AI link is displayed 
     st.page_link("pages/Assistant_AI.py", label="Assistant AI 💬", icon="💬")
     
     # --- UI Header ---
@@ -153,7 +171,8 @@ def search_page():
             # Initialize or clear the summary stored in session state when a new search runs
             if 'summary_dict' not in st.session_state:
                  st.session_state.summary_dict = {}
-            st.session_state.summary_dict = {}
+            # Do NOT clear the dict here, only clear upon search query change if you want summaries to persist after scrolling.
+            # We'll clear the dict inside the button press logic if the button is pressed on a different item.
 
             # SINGLE COLUMN DISPLAY LOOP
             for idx, row in results_df.iterrows():
@@ -162,32 +181,35 @@ def search_page():
                 
                 with st.container():
                     st.markdown(f'<div class="result-card">', unsafe_allow_html=True)
+                    
+                    # 🟢 FIX 2: Display title first with custom styling
                     st.markdown(f"**Title:** <a href='{row['Link']}' target='_blank'>{row['Title']}</a>", unsafe_allow_html=True)
                     
-                    # Center the button 
-                    col_spacer, col_btn, col_spacer_2 = st.columns([1, 2, 1])
-                    with col_btn:
-                        if st.button("🔬 Gather & Summarize", key=f"btn_summarize_{idx}"):
-                            
-                            # 1. GENERATE SUMMARY IMMEDIATELY UPON CLICK
-                            with st.spinner(f"Accessing and summarizing: {row['Title']}..."):
-                                try:
-                                    text = fetch_url_text(row['Link'])
-                                    summary = summarize_text_with_gemini(text)
-                                    st.session_state.summary_dict[summary_key] = summary
-                                except Exception as e:
-                                    st.session_state.summary_dict[summary_key] = f"**Critical Error during summarization:** {e}. Please check the link and API key."
-                            
-                            # No st.rerun() needed. The script will simply continue/finish the run cycle.
+                    # 🟢 FIX 2: Place button immediately below title
+                    if st.button("🔬 Gather & Summarize", key=f"btn_summarize_{idx}"):
+                        
+                        # 1. GENERATE SUMMARY IMMEDIATELY UPON CLICK
+                        with st.spinner(f"Accessing and summarizing: {row['Title']}..."):
+                            try:
+                                text = fetch_url_text(row['Link'])
+                                summary = summarize_text_with_gemini(text)
+                                # Store the result in session state
+                                st.session_state.summary_dict[summary_key] = summary
+                            except Exception as e:
+                                st.session_state.summary_dict[summary_key] = f"**Critical Error during summarization:** {e}. Please check the link and API key."
+                        
+                        # We use st.rerun() here to force the display logic (below) to run 
+                        # after the long operation has updated the session state.
+                        st.rerun()
 
                     # 2. DISPLAY SUMMARY IF IT EXISTS FOR THIS PUBLICATION
                     if summary_key in st.session_state.summary_dict:
                         summary_content = st.session_state.summary_dict[summary_key]
                         
                         st.markdown('<div class="summary-display">', unsafe_allow_html=True)
-                        if "Critical Error" in summary_content:
+                        if "Critical Error" in summary_content or summary_content.startswith("ERROR"):
                             st.markdown(f"**❌ Failed to Summarize:** *{row['Title']}*", unsafe_allow_html=True)
-                            st.markdown(summary_content)
+                            st.markdown(f"**Error Details:** {summary_content}")
                         else:
                             st.markdown(f"**📄 Summary for:** *{row['Title']}*", unsafe_allow_html=True)
                             st.markdown(summary_content)
@@ -199,6 +221,7 @@ def search_page():
     
 
 # --- NAVIGATION SETUP ---
+# Keep st.navigation to register the pages
 pg = st.navigation([
     st.Page(search_page, title="Simplified Knowledge 🔍", icon="🏠"),
     st.Page("pages/Assistant_AI.py", title="Assistant AI 💬", icon="💬"),
