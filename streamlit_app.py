@@ -347,13 +347,11 @@ st.markdown("---")
 st.header("Chat with AI for quick answers!")
 
 q = st.text_input("Ask a question!", key="chat_box")
+
 if q:
-    # Build a short context by concatenating first 200 abstracts/titles if available; here we only have titles/links so use top titles
-    corpus_text = " ".join(df["Title"].astype(str).head(200).tolist())[:2000]
-    prompt = f"Use the following corpus context (titles only):\n{corpus_text}\n\nQuestion: {q}\nAnswer concisely."
     try:
         model = genai.GenerativeModel(MODEL_NAME)
-        resp = model.generate_content(prompt)
+        resp = model.generate_content(q)  # <-- just send q directly
         st.subheader("Answer:")
         st.write(resp.text)
     except Exception as e:
