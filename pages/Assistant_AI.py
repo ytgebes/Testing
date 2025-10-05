@@ -12,7 +12,7 @@ except Exception as e:
     st.error(f"Error configuring Gemini AI: {e}")
     st.stop()
 
-# --- STYLING (Standardized Purple and Font Size Increase) ---
+# --- STYLING (Standardized) ---
 st.markdown("""
     <style>
     /* HIDE STREAMLIT'S DEFAULT NAVIGATION */
@@ -38,19 +38,19 @@ st.markdown("""
         padding: 14px;
     }
     
-    /* Standardized Purple Links/Text (using #6A1B9A) */
+    /* Standardized Purple Links/Text (#6A1B9A) */
     a { color: #6A1B9A; text-decoration: none; font-weight: bold; }
     a:hover { text-decoration: underline; }
     
     /* Style for the centered header text (608 publications) */
     .centered-header-text {
         text-align: center; 
-        font-size: 1.25em; /* 👈 INCREASED FONT SIZE (from standard p size) */
-        margin-top: -15px; /* Pull it closer to the H1 */
+        font-size: 1.25em; /* Increased font size */
+        margin-top: -15px;
     }
     /* Standardized Purple on the bold text */
     .centered-header-text strong {
-        color: #6A1B9A; /* 👈 CONSISTENT PURPLE */
+        color: #6A1B9A; 
     }
     </style>
 """, unsafe_allow_html=True)
@@ -58,6 +58,7 @@ st.markdown("""
 # --- HELPER FUNCTIONS ---
 @st.cache_data
 def load_data(file_path):
+    """Loads the publication data for the RAG search."""
     try:
         return pd.read_csv("SB_publication_PMC.csv", usecols=['Title', 'Link']) 
     except (FileNotFoundError, ValueError):
@@ -65,6 +66,7 @@ def load_data(file_path):
         st.stop()
 
 def find_relevant_publications(query, df, top_k=5):
+    """Finds publications whose titles contain the query string."""
     if query:
         mask = df["Title"].astype(str).str.lower().str.contains(query.lower(), na=False)
         return df[mask].head(top_k)
@@ -74,8 +76,10 @@ def find_relevant_publications(query, df, top_k=5):
 
 df = load_data("SB_publication_PMC.csv")
 
+# 🟢 NEW: Add "Back to Search" button
+st.page_link("streamlit_app.py", label="⬅️ Back to Search", icon="🏠")
+
 st.title("Assistant AI")
-# 🟢 FIX: Applying the new CSS class for size and using <strong> for purple/bold text
 st.markdown(
     "<p class='centered-header-text'>Ask me anything about the <strong>608 NASA bioscience publications</strong>.</p>", 
     unsafe_allow_html=True
