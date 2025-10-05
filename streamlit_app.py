@@ -19,6 +19,25 @@ model = genai.GenerativeModel("gemini-2.5-flash")
 # Load the CSV file with NASA publications
 df = pd.read_csv("SB_publication_PMC.csv")  # replace with your file path
 
+# --- Custom CSS for white text in text boxes ---
+st.markdown("""
+    <style>
+    /* Make all text inputs white */
+    input[type="text"] {
+        color: white !important;
+    }
+    /* Optional: darker background for the input box */
+    input[type="text"] {
+        background-color: #1e1e2f !important;
+        border: 1px solid #444 !important;
+    }
+    /* Make placeholder text lighter so it's visible too */
+    input::placeholder {
+        color: #cccccc !important;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
 # ----------------- Supported Languages -----------------
 LANGUAGES = {
     "English": {"label": "English (English)", "code": "en"},
