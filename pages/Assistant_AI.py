@@ -12,7 +12,7 @@ except Exception as e:
     st.error(f"Error configuring Gemini AI: {e}")
     st.stop()
 
-# --- STYLING (Standardized) ---
+# --- STYLING (MATCHING MAIN PAGE) ---
 st.markdown("""
     <style>
     /* HIDE STREAMLIT'S DEFAULT NAVIGATION */
@@ -25,7 +25,7 @@ st.markdown("""
     /* Remove custom nav button styling as we now use st.navigation */
     .nav-container { display: none; } 
 
-    /* Main Theme: WHITE BACKGROUND */
+    /* Main Theme */
     body { background-color: #FFFFFF; color: #333333; }
     h1 { color: #000000; text-align: center; }
     
@@ -38,19 +38,13 @@ st.markdown("""
         padding: 14px;
     }
     
-    /* Standardized Purple Links/Text (#6A1B9A) */
+    /* Purple links/text */
     a { color: #6A1B9A; text-decoration: none; font-weight: bold; }
     a:hover { text-decoration: underline; }
     
-    /* Style for the centered header text (608 publications) */
-    .centered-header-text {
-        text-align: center; 
-        font-size: 1.25em; /* Increased font size */
-        margin-top: -15px;
-    }
-    /* Standardized Purple on the bold text */
+    /* Style for the centered header text (to make 608 bold) */
     .centered-header-text strong {
-        color: #6A1B9A; 
+        color: #6A1B9A;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -58,7 +52,6 @@ st.markdown("""
 # --- HELPER FUNCTIONS ---
 @st.cache_data
 def load_data(file_path):
-    """Loads the publication data for the RAG search."""
     try:
         return pd.read_csv("SB_publication_PMC.csv", usecols=['Title', 'Link']) 
     except (FileNotFoundError, ValueError):
@@ -66,7 +59,6 @@ def load_data(file_path):
         st.stop()
 
 def find_relevant_publications(query, df, top_k=5):
-    """Finds publications whose titles contain the query string."""
     if query:
         mask = df["Title"].astype(str).str.lower().str.contains(query.lower(), na=False)
         return df[mask].head(top_k)
@@ -76,12 +68,10 @@ def find_relevant_publications(query, df, top_k=5):
 
 df = load_data("SB_publication_PMC.csv")
 
-# 🟢 NEW: Add "Back to Search" button
-st.page_link("streamlit_app.py", label="⬅️ Back to Search", icon="🏠")
-
 st.title("Assistant AI")
+# 🟢 FIX: Used custom span/markdown to bold the publication count
 st.markdown(
-    "<p class='centered-header-text'>Ask me anything about the <strong>608 NASA bioscience publications</strong>.</p>", 
+    "<p class='centered-header-text' style='text-align: center;'>Ask me anything about the <strong>608 NASA bioscience publications</strong>.</p>", 
     unsafe_allow_html=True
 )
 
@@ -106,7 +96,7 @@ with col2:
                 relevant_pubs = find_relevant_publications(prompt, df)
                 
                 if not relevant_pubs.empty:
-                    # RAG Mode
+                    # RAG Mode: Publications were found. Instruct AI to use them.
                     context_str = "Based on the following relevant publications:\n"
                     for _, row in relevant_pubs.iterrows():
                         context_str += f"- **Title:** {row['Title']}\n" 
@@ -120,7 +110,7 @@ with col2:
                         f"--- USER'S QUESTION ---\n{prompt}"
                     )
                 else:
-                    # General Knowledge Fallback
+                    # 🟢 FIX: General Knowledge Fallback. Instruct AI to answer generally.
                     full_prompt = (
                         "You are a specialized AI assistant. No specific NASA publications were found for the user's query in your database of 608 papers. "
                         "Therefore, answer the user's question accurately using your general knowledge about bioscience and space, "
