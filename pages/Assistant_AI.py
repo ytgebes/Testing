@@ -3,50 +3,46 @@ import pandas as pd
 import google.generativeai as genai
 
 # --- CONFIGURATION ---
-st.set_page_config(page_title="NASA AI Chat Assistant", page_icon="🔬", layout="wide")
+st.set_page_config(page_title="Assistant AI", page_icon="💬", layout="wide")
 
 try:
+    # UPDATED: Model name changed to gemini-1.5-pro
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-    MODEL_NAME = "gemini-1.5-flash"
+    MODEL_NAME = "gemini-1.5-pro"
 except Exception as e:
     st.error(f"Error configuring Gemini AI: {e}")
     st.stop()
 
-# --- STYLING (WITH NEW NAV BUTTON) ---
+# --- STYLING ---
 st.markdown("""
     <style>
     /* HIDE STREAMLIT'S DEFAULT NAVIGATION */
-    [data-testid="stSidebar"] {
-        display: none;
-    }
+    [data-testid="stSidebar"] { display: none; }
+
+    /* Push content to the top */
+    .block-container { padding-top: 1rem !important; }
     
-    /* NEW: STYLED NAVIGATION BUTTON CONTAINER */
+    /* UPDATED: Nav button container aligned to the left */
     .nav-container {
         display: flex;
-        justify-content: flex-end;
+        justify-content: flex-start; /* Aligns button to the left */
     }
     .nav-button a {
-        background-color: #6c757d; /* Grey for back button */
-        color: white;
-        padding: 10px 20px;
-        border-radius: 8px;
-        text-decoration: none;
-        font-weight: bold;
+        background-color: #6c757d; color: white; padding: 10px 20px;
+        border-radius: 8px; text-decoration: none; font-weight: bold;
         transition: background-color 0.3s ease;
     }
-    .nav-button a:hover {
-        background-color: #5a6268; /* Darker grey on hover */
-    }
+    .nav-button a:hover { background-color: #5a6268; }
 
     /* Main Theme */
     body { background-color: #FFFFFF; color: #333333; }
-    h1 { color: #000000; }
+    h1 { color: #000000; text-align: center; }
     .stTextInput>div>div>input { color: #000000 !important; background-color: #F0F2F6 !important; }
     a { color: #6A1B9A; text-decoration: none; font-weight: bold; }
     </style>
 """, unsafe_allow_html=True)
 
-# --- NEW NAVIGATION BUTTON ---
+# --- NAVIGATION BUTTON (MOVED TO TOP-LEFT) ---
 st.markdown(
     '<div class="nav-container"><div class="nav-button"><a href="/" target="_self">⬅️ Back to Search</a></div></div>',
     unsafe_allow_html=True
@@ -68,12 +64,10 @@ def find_relevant_publications(query, df, top_k=5):
     return pd.DataFrame()
 
 # --- MAIN PAGE UI & LOGIC ---
-st.title("🔬 AI Chat Assistant")
+st.title("Assistant AI")
 st.markdown("<p style='text-align: center;'>Ask me anything about the <strong>608 NASA bioscience publications</strong>.</p>", unsafe_allow_html=True)
 
-# Use columns to center the chat interface
 _, col2, _ = st.columns([1, 2, 1])
-
 with col2:
     if "messages" not in st.session_state:
         st.session_state.messages = []
@@ -116,4 +110,4 @@ with col2:
                 
                 placeholder.markdown(ai_response)
         
-        st.session_state.messages.append({"role": "assistant", "content": ai_response})
+        st.session_state.messages.append({"role": "assistant", content: ai_response})
