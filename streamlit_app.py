@@ -129,6 +129,34 @@ def load_data(file_path):
     except Exception as e:
         st.error(f"Error loading data: {e}")
         st.stop()
+def extract_json_from_text(text):
+    start = text.find('{')
+    end = text.rfind('}')
+    if start == -1 or end == -1:
+        raise ValueError("No JSON object found in model output.")
+    return json.loads(text[start:end+1])
+
+def translate_dict_via_gemini(source_dict: dict, target_lang_name: str):
+    prompt = (
+        f"Translate the VALUES of the following JSON object into {target_lang_name}.\n"
+        "Return ONLY a JSON object with the same keys and translated values (no commentary).\n"
+        f"Input JSON:\n{json.dumps(source_dict, ensure_ascii=False)}\n"
+    )
+    resp = model.generate_content(prompt)
+    return extract_json_from_text(resp.text)
+
+def translate_list_via_gemini(items: list, target_lang_name: str):
+    prompt = (
+        f"Translate this list of short strings into {target_lang_name}. "
+        f"Return a JSON array of translated strings in the same order.\n"
+        f"Input: {json.dumps(items, ensure_ascii=False)}\n"
+    )
+    resp = model.generate_content(prompt)
+    start = resp.text.find('[')
+    end = resp.text.rfind(']')
+    if start == -1 or end == -1:
+        raise ValueError("No JSON array found in model output.")
+    return json.loads(resp.text[start:end+1])
 
 @lru_cache(maxsize=128)
 def fetch_url_text(url: str):
@@ -249,3 +277,70 @@ pg = st.navigation([
 ])
 
 pg.run()    
+
+# Languages
+LANGUAGES = {
+    "English": {"label": "English (English)", "code": "en"},
+    "Türkçe": {"label": "Türkçe (Turkish)", "code": "tr"},
+    "Français": {"label": "Français (French)", "code": "fr"},
+    "Español": {"label": "Español (Spanish)", "code": "es"},
+    "Afrikaans": {"label": "Afrikaans (Afrikaans)", "code": "af"},
+    "العربية": {"label": "العربية (Arabic)", "code": "ar"},
+    "Tiếng Việt": {"label": "Tiếng Việt (Vietnamese)", "code": "vi"},
+    "isiXhosa": {"label": "isiXhosa (Xhosa)", "code": "xh"},
+    "ייִדיש": {"label": "ייִדיש (Yiddish)", "code": "yi"},
+    "Yorùbá": {"label": "Yorùbá (Yoruba)", "code": "yo"},
+    "isiZulu": {"label": "isiZulu (Zulu)", "code": "zu"},
+    "Deutsch": {"label": "Deutsch (German)", "code": "de"},
+    "Italiano": {"label": "Italiano (Italian)", "code": "it"},
+    "Русский": {"label": "Русский (Russian)", "code": "ru"},
+    "日本語": {"label": "日本語 (Japanese)", "code": "ja"},
+    "한국어": {"label": "한국어 (Korean)", "code": "ko"},
+    "Polski": {"label": "Polski (Polish)", "code": "pl"},
+    "Nederlands": {"label": "Nederlands (Dutch)", "code": "nl"},
+    "Svenska": {"label": "Svenska (Swedish)", "code": "sv"},
+    "Dansk": {"label": "Dansk (Danish)", "code": "da"},
+    "Norsk": {"label": "Norsk (Norwegian)", "code": "no"},
+    "Suomi": {"label": "Suomi (Finnish)", "code": "fi"},
+    "हिन्दी": {"label": "हिन्दी (Hindi)", "code": "hi"},
+    "বাংলা": {"label": "বাংলা (Bengali)", "code": "bn"},
+    "ગુજરાતી": {"label": "ગુજરાતી (Gujarati)", "code": "gu"},
+    "ಕನ್ನಡ": {"label": "ಕನ್ನಡ (Kannada)", "code": "kn"},
+    "മലയാളം": {"label": "മലയാളം (Malayalam)", "code": "ml"},
+    "मराठी": {"label": "मराठी (Marathi)", "code": "mr"},
+    "ਪੰਜਾਬੀ": {"label": "ਪੰਜਾਬੀ (Punjabi)", "code": "pa"},
+    "தமிழ்": {"label": "தமிழ் (Tamil)", "code": "ta"},
+    "తెలుగు": {"label": "తెలుగు (Telugu)", "code": "te"},
+    "Odia": {"label": "Odia (Odia)", "code": "or"},
+    "עברית": {"label": "עברית (Hebrew)", "code": "he"},
+    "فارسی": {"label": "فارسی (Persian)", "code": "fa"},
+    "ไทย": {"label": "ไทย (Thai)", "code": "th"},
+    "Bahasa Indonesia": {"label": "Bahasa Indonesia (Indonesian)", "code": "id"},
+    "Malay": {"label": "Malay (Malay)", "code": "ms"},
+    "Shqip": {"label": "Shqip (Albanian)", "code": "sq"},
+    "Azərbaycan": {"label": "Azərbaycan (Azerbaijani)", "code": "az"},
+    "Беларуская": {"label": "Беларуская (Belarusian)", "code": "be"},
+    "Bosanski": {"label": "Bosanski (Bosnian)", "code": "bs"},
+    "Български": {"label": "Български (Bulgarian)", "code": "bg"},
+    "Hrvatski": {"label": "Hrvatski (Croatian)", "code": "hr"},
+    "Čeština": {"label": "Čeština (Czech)", "code": "cs"},
+    "Ελληνικά": {"label": "Ελληνικά (Greek)", "code": "el"},
+    "Eesti": {"label": "Eesti (Estonian)", "code": "et"},
+    "Latviešu": {"label": "Latviešu (Latvian)", "code": "lv"},
+    "Lietuvių": {"label": "Lietuvių (Lithuanian)", "code": "lt"},
+    "Magyar": {"label": "Magyar (Hungarian)", "code": "hu"},
+    "Slovenčina": {"label": "Slovenčina (Slovak)", "code": "sk"},
+    "Slovenščina": {"label": "Slovenščina (Slovenian)", "code": "sl"},
+    "ქართული": {"label": "ქართული (Georgian)", "code": "ka"},
+    "Հայերեն": {"label": "Հայերեն (Armenian)", "code": "hy"},
+    "Қазақша": {"label": "Қазақша (Kazakh)", "code": "kk"},
+    "Кыргызча": {"label": "Кыргызча (Kyrgyz)", "code": "ky"},
+    "Монгол": {"label": "Монгол (Mongolian)", "code": "mn"},
+    "Српски": {"label": "Српски (Serbian)", "code": "sr"},
+    "Словенски": {"label": "Словенски (Slovene)", "code": "sl"},
+    "தமிழ்": {"label": "தமிழ் (Tamil)", "code": "ta"},
+    "ગુજરાતી": {"label": "ગુજરાતી (Gujarati)", "code": "gu"},
+    "हिन्दी": {"label": "हिन्दी (Hindi)", "code": "hi"},
+}
+
+
