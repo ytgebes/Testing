@@ -182,13 +182,13 @@ def search_page():
     if st.session_state.summary_content:
         st.markdown("---")
         st.markdown(f'<div class="summary-card">', unsafe_allow_html=True)
-        st.markdown(f"## 📄 Summary for: {st.session_state.summary_title}")
+        st.markdown(f"## Summary for: {st.session_state.summary_title}")
         st.markdown(st.session_state.summary_content)
         st.markdown("</div>", unsafe_allow_html=True)
 
 # --- NAVIGATION SETUP ---
 pg = st.navigation([
-    st.Page(search_page, title="Simplified Knowledge 🔍", icon="🏠"),
+    st.Page(search_page, title="Simplified Knowledge 🔍",),
     st.Page("pages/Assistant_AI.py", title="Assistant AI 💬", icon="💬"),
 ])
 
