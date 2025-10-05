@@ -11,7 +11,6 @@ import google.generativeai as genai
 st.set_page_config(page_title="Simplified Knowledge", layout="wide")
 
 try:
-    # UPDATED: Model name changed to gemini-1.5-pro
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
     MODEL_NAME = "gemini-2.5-flash"
 except Exception as e:
