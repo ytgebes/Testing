@@ -6,7 +6,8 @@ from bs4 import BeautifulSoup
 import PyPDF2
 from functools import lru_cache
 import google.generativeai as genai
-from streamlit_extras.let_it_rain import rain # Assuming you need this for the rain effect
+import json # Import json for translation functions
+from streamlit_extras.let_it_rain import rain # Assuming this is required for the effect
 
 # --- CONFIGURATION ---
 st.set_page_config(page_title="Simplified Knowledge", layout="wide")
@@ -17,18 +18,21 @@ try:
     genai.configure(api_key=GEMINI_API_KEY)
     MODEL_NAME = "gemini-2.5-flash"
     DATA_FILE = "SB_publication_PMC.csv"
-    # Placeholder for UI strings that should be in a global scope for translation logic
+    
+    # Placeholder for UI strings (English defaults)
     UI_STRINGS_EN = {
         "title": "Simplified Knowledge",
         "description": "Search, Discover, and Summarize NASA's Bioscience Publications",
         "search_placeholder": "e.g., microgravity, radiation, Artemis...",
-        # Add any other strings used in your main page here
+        "button_summarize": "🔬 Gather & Summarize",
+        "search_header": "matching publications:",
+        "warning_empty": "No matching publications found."
     }
 except Exception as e:
     st.error(f"Error configuring AI or defining constants: {e}")
     st.stop()
 
-# --- LANGUAGES DICTIONARY (MUST BE DEFINED HERE) ---
+# --- LANGUAGES DICTIONARY (REQUIRED FOR SELECTBOX) ---
 LANGUAGES = {
     "English": {"label": "English (English)", "code": "en"},
     "Türkçe": {"label": "Türkçe (Turkish)", "code": "tr"},
@@ -49,7 +53,8 @@ if 'summary_dict' not in st.session_state:
 if "current_lang" not in st.session_state:
     st.session_state.current_lang = "English"
 if "translations" not in st.session_state:
-    st.session_state.translations = {"English": UI_STRINGS_EN.copy()}
+    # Initialize translations with English defaults
+    st.session_state.translations = {"English": UI_STRINGS_EN.copy()} 
 if 'last_query' not in st.session_state:
     st.session_state.last_query = ""
 
@@ -57,18 +62,17 @@ if 'last_query' not in st.session_state:
 # --- STYLING (Main Page) ---
 st.markdown("""
     <style>
-    /* HIDE STREAMLIT'S DEFAULT NAVIGATION AND SIDEBAR COMPLETELY */
-    [data-testid="stSidebar"], [data-testid="stNavigation"] { display: none; }
+    /* HIDE STREAMLIT'S DEFAULT SIDEBAR (including the multi-page menu) */
+    [data-testid="stSidebar"] { display: none; }
     
-    /* NEW: Custom Nav buttons container for the top-left */
-    /* This uses flexbox to hold both custom buttons */
+    /* NEW: Custom Nav buttons container for the top of the page */
     .nav-container-ai {
         display: flex;
-        justify-content: space-between; /* Space out the nav links and the language dropdown */
+        justify-content: space-between; /* Puts buttons on the left, dropdown on the right */
         align-items: center;
         padding-top: 3rem; 
         padding-bottom: 0rem;
-        margin-bottom: 2rem; /* Add space below the whole top block */
+        margin-bottom: 1rem;
     }
     
     /* Container for the two custom buttons (left side) */
@@ -89,11 +93,6 @@ st.markdown("""
     }
     .nav-button-style a:hover { 
         background-color: #4F0A7B; /* Darker purple on hover */
-    }
-    
-    /* Adjust Streamlit's selectbox to be cleaner for the language dropdown */
-    [data-testid="stFormSubmitButton"] {
-        width: 100%;
     }
     
     /* Push content to the top */
@@ -145,11 +144,10 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- HELPER FUNCTIONS (UNCHANGED) ---
+# --- HELPER FUNCTIONS ---
 
 @st.cache_data
 def load_data(file_path): 
-    # ... (function body unchanged) ...
     try:
         return pd.read_csv(file_path)
     except FileNotFoundError:
@@ -192,7 +190,6 @@ def translate_list_via_gemini(items: list, target_lang_name: str):
 
 @lru_cache(maxsize=128)
 def fetch_url_text(url: str):
-    # ... (function body unchanged) ...
     try:
         headers = {"User-Agent": "Mozilla/5.0"}
         r = requests.get(url, headers=headers, timeout=20)
@@ -218,7 +215,6 @@ def fetch_url_text(url: str):
             return f"ERROR_HTML_PARSE: {e}"
 
 def summarize_text_with_gemini(text: str):
-    # ... (function body unchanged) ...
     if not text or text.startswith("ERROR"): 
         return f"Could not summarize due to a content error: {text.split(': ')[-1]}"
 
@@ -236,6 +232,9 @@ def summarize_text_with_gemini(text: str):
 def search_page():
     
     # --- TOP NAVIGATION BAR (HTML Buttons and Language Dropdown) ---
+    # This block replaces the need for st.navigation and st.sidebar
+    
+    # 1. Custom HTML Links (Left Side)
     st.markdown("""
         <div class="nav-container-ai">
             <div class="nav-buttons-left">
@@ -249,8 +248,8 @@ def search_page():
         </div>
     """, unsafe_allow_html=True)
     
-    # --- LANGUAGE SELECTION (Top Right of Main Content Area) ---
-    # The columns must be placed AFTER the custom HTML for visual placement
+    # 2. Language Selection (Right Side)
+    # Use st.columns to push the selectbox to the far right.
     lang_spacer_col, lang_select_col = st.columns([5, 1.5]) 
 
     with lang_select_col:
@@ -259,7 +258,7 @@ def search_page():
             options=list(LANGUAGES.keys()),
             format_func=lambda x: LANGUAGES[x]["label"],
             index=list(LANGUAGES.keys()).index(st.session_state.current_lang),
-            label_visibility="collapsed" # Hide the label, use the globe icon
+            label_visibility="collapsed" # Hide the label for a cleaner look
         )
 
     # --- Translation Logic (Must run immediately after selection) ---
@@ -288,8 +287,10 @@ def search_page():
         
     # --- UI Header (Using translated strings) ---
     st.markdown(f"<h1>{translated_strings.get('title', 'Simplified Knowledge')}</h1>", unsafe_allow_html=True)
-    st.markdown(f"### {translated_strings.get('description', 'Search, Discover, and Summarize NASA\'s Bioscience Publications')}")
-
+    
+    # *** FIXED LINE: Using double quotes for the default string to avoid f-string SyntaxError ***
+    st.markdown(f"### {translated_strings.get('description', "Search, Discover, and Summarize NASA's Bioscience Publications")}")
+    
     search_query = st.text_input(
         "Search publications...", 
         placeholder=translated_strings.get('search_placeholder', "e.g., microgravity, radiation, Artemis..."), 
@@ -299,14 +300,15 @@ def search_page():
     # --- Search Logic ---
     df = load_data(DATA_FILE)
     if search_query:
-        # The rest of your search logic remains here... (omitted for brevity)
         mask = df["Title"].astype(str).str.contains(search_query, case=False, na=False)
         results_df = df[mask].reset_index(drop=True)
         st.markdown("---")
-        st.subheader(f"Found {len(results_df)} matching publications:")
+        
+        # Use translated string for header
+        st.subheader(f"Found {len(results_df)} {translated_strings.get('search_header', 'matching publications:')}")
         
         if results_df.empty:
-            st.warning("No matching publications found.")
+            st.warning(translated_strings.get('warning_empty', "No matching publications found."))
         else:
             if st.session_state.get('last_query') != search_query:
                 st.session_state.summary_dict = {}
@@ -319,7 +321,8 @@ def search_page():
                     st.markdown(f'<div class="result-card">', unsafe_allow_html=True)
                     st.markdown(f"**Title:** <a href='{row['Link']}' target='_blank'>{row['Title']}</a>", unsafe_allow_html=True)
                     
-                    if st.button("🔬 Gather & Summarize", key=f"btn_summarize_{idx}"):
+                    # Use translated string for button
+                    if st.button(translated_strings.get('button_summarize', "🔬 Gather & Summarize"), key=f"btn_summarize_{idx}"):
                         with st.spinner(f"Accessing and summarizing: {row['Title']}..."):
                             try:
                                 text = fetch_url_text(row['Link'])
@@ -343,8 +346,5 @@ def search_page():
     
 
 # --- APPLICATION ENTRY POINT ---
-
-# Remove the st.navigation and pg.run() blocks
-# This function is now the entry point for this single-page app
 if __name__ == "__main__":
     search_page()
