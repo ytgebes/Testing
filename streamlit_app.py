@@ -1,195 +1,202 @@
 import streamlit as st
-import json
+import pandas as pd
 import io
 import time
-import pandas as pd
 import requests
 from bs4 import BeautifulSoup
 import PyPDF2
 from functools import lru_cache
-from streamlit_extras.let_it_rain import rain
 import google.generativeai as genai
+from streamlit_extras.let_it_rain import rain
 
-# --------------------------- CONFIG ---------------------------
-MODEL_NAME = "gemini-2.5-flash"
-genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-model = genai.GenerativeModel(MODEL_NAME)
+# --- CONFIGURATION & INITIALIZATION ---
 
-# --------------------------- LOAD DATA ---------------------------
-df = pd.read_csv("SB_publication_PMC.csv")  # CSV with "Title" and "Link"
+# Configure the page
+st.set_page_config(
+    page_title="NASA Simplified Knowledge",
+    page_icon="🚀",
+    layout="wide"
+)
 
-# --------------------------- GLOBAL STYLING ---------------------------
-st.set_page_config(page_title="Simplified Knowledge", layout="wide")
+# Configure Gemini AI
+try:
+    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+    MODEL_NAME = "gemini-1.5-flash"
+except Exception as e:
+    st.error(f"Error configuring Gemini AI. Please check your API key in Streamlit secrets. Details: {e}")
+    st.stop()
+
+# --- STYLING ---
+
 st.markdown("""
-<style>
-body { background-color: #0b3d91; color: white; }
-.main-title {
-    text-align: center;
-    font-size: 50px;
-    font-weight: 800;
-    margin-top: -20px;
-    margin-bottom: 10px;
-    color: white;
-}
-.subtitle {
-    text-align: center;
-    font-size: 20px;
-    color: #cccccc;
-    margin-bottom: 40px;
-}
-.result-card {
-    background-color: #0e2a6b;
-    padding: 12px;
-    border-radius:8px;
-    margin-bottom:10px;
-}
-input[type="text"] {
-    color: white !important;
-    background-color: #1e1e2f !important;
-    border: 1px solid #444 !important;
-    font-size: 18px !important;
-    text-align: center;
-}
-input::placeholder {
-    color: #cccccc !important;
-    text-align: center;
-}
-</style>
+    <style>
+    /* Main background and text color */
+    body {
+        background-color: #0b3d91;
+        color: white;
+    }
+    /* Page title styling */
+    .st-emotion-cache-10trblm {
+        font-size: 4em; /* Much larger title */
+        font-weight: bold;
+        text-align: center;
+        padding-top: 1rem;
+        padding-bottom: 2rem;
+    }
+    /* Search input styling */
+    input[type="text"] {
+        color: white !important;
+        background-color: #1e1e2f !important;
+        border: 1px solid #444 !important;
+        border-radius: 8px;
+        padding: 12px;
+    }
+    input::placeholder {
+        color: #cccccc !important;
+    }
+    /* Custom result card styling */
+    .result-card {
+        background-color: #0e2a6b;
+        padding: 1.5rem;
+        border-radius: 10px;
+        margin-bottom: 1rem;
+        border: 1px solid #1c4b82;
+        transition: transform 0.2s ease-in-out;
+    }
+    .result-card:hover {
+        transform: scale(1.02);
+        border: 1px solid #00ffcc;
+    }
+    a {
+        color: #00ffcc;
+        text-decoration: none;
+    }
+    .stButton>button {
+        border-radius: 8px;
+        width: 100%;
+    }
+    </style>
 """, unsafe_allow_html=True)
 
-# --------------------------- HELPER FUNCTIONS ---------------------------
-def extract_json_from_text(text):
-    start = text.find('{')
-    end = text.rfind('}')
-    if start == -1 or end == -1:
-        raise ValueError("No JSON object found in model output.")
-    return json.loads(text[start:end+1])
 
-def translate_list_via_gemini(items: list, target_lang_name: str):
-    prompt = (
-        f"Translate this list of short strings into {target_lang_name}. "
-        f"Return a JSON array of translated strings in the same order.\n"
-        f"Input: {json.dumps(items, ensure_ascii=False)}\n"
-    )
-    resp = model.generate_content(prompt)
-    start = resp.text.find('[')
-    end = resp.text.rfind(']')
-    if start == -1 or end == -1:
-        raise ValueError("No JSON array found in model output.")
-    return json.loads(resp.text[start:end+1])
+# --- HELPER FUNCTIONS (CACHED) ---
 
-@lru_cache(maxsize=256)
-def fetch_url_text(url: str) -> str:
-    """Download url and return extracted text (PDF or HTML). Cached in-memory."""
+@st.cache_data
+def load_data(file_path):
+    """Loads the NASA publications CSV into a pandas DataFrame."""
     try:
-        headers = {"User-Agent": "Mozilla/5.0 (compatible; NASA-App/1.0)"}
-        r = requests.get(url, headers=headers, timeout=15)
+        return pd.read_csv(file_path)
+    except FileNotFoundError:
+        st.error(f"Fatal Error: The data file '{file_path}' was not found. Please make sure it's in the correct directory.")
+        st.stop()
+
+@lru_cache(maxsize=128)
+def fetch_url_text(url: str) -> str:
+    """Download a URL and return its text content (handles PDF and HTML)."""
+    try:
+        headers = {"User-Agent": "Mozilla/5.0 (compatible; NASA-App/1.0; +http://your-app-url.com)"}
+        r = requests.get(url, headers=headers, timeout=20)
         r.raise_for_status()
-    except Exception as e:
-        return f"ERROR_FETCH: {str(e)}"
+    except requests.exceptions.RequestException as e:
+        return f"ERROR_FETCH: Could not retrieve content from URL. Reason: {str(e)}"
 
     content_type = r.headers.get("Content-Type", "").lower()
+
+    # Handle PDF content
     if "pdf" in content_type or url.lower().endswith(".pdf"):
         try:
-            pdf_bytes = io.BytesIO(r.content)
-            reader = PyPDF2.PdfReader(pdf_bytes)
-            text_parts = [p.extract_text() for p in reader.pages if p.extract_text()]
-            return "\n".join(text_parts) if text_parts else "ERROR_EXTRACT: No text extracted from PDF."
+            with io.BytesIO(r.content) as pdf_bytes:
+                reader = PyPDF2.PdfReader(pdf_bytes)
+                if not reader.pages:
+                    return "ERROR_EXTRACT: PDF is empty or corrupted."
+                text_parts = [p.extract_text() for p in reader.pages if p.extract_text()]
+                return "\n".join(text_parts) if text_parts else "ERROR_EXTRACT: No text could be extracted from this PDF."
         except Exception as e:
-            return f"ERROR_PDF_PARSE: {str(e)}"
+            return f"ERROR_PDF_PARSE: Failed to parse the PDF file. Reason: {str(e)}"
+    # Handle HTML content
     else:
         try:
             soup = BeautifulSoup(r.text, "html.parser")
-            paragraphs = [p.get_text(separator=" ", strip=True) for p in soup.find_all("p") if p.get_text(strip=True)]
-            if not paragraphs and soup.body:
-                return soup.body.get_text(separator=" ", strip=True)[:20000]
-            return "\n\n".join(paragraphs)[:20000]
+            for tag in soup(['script', 'style', 'header', 'footer', 'nav']):
+                tag.decompose()
+            body = soup.body
+            if body:
+                return " ".join(body.get_text(separator=" ", strip=True).split())[:25000]
+            return "ERROR_EXTRACT: Could not find the main body content of the webpage."
         except Exception as e:
-            return f"ERROR_HTML_PARSE: {str(e)}"
+            return f"ERROR_HTML_PARSE: Failed to parse the HTML content. Reason: {str(e)}"
 
-def summarize_text_with_gemini(text: str, max_output_chars: int = 1500) -> str:
+def summarize_text_with_gemini(text: str) -> str:
+    """Generates a summary of the provided text using the Gemini model."""
     if not text or text.startswith("ERROR"):
         return text
-    context = text[:6000]
+
+    # Truncate text to stay within model limits and improve performance
+    context = text[:25000]
     prompt = (
-        f"Summarize the following NASA bioscience paper content in bullet points and a short summary.\n\n"
-        f"Content:\n{context}\n\nOutput: 3 short bullet points of key findings, then a 2-3 sentence summary."
+        "You are an expert scientific analyst. Summarize the key findings from the following NASA bioscience publication content. "
+        "Provide your output in Markdown format with two sections:\n\n"
+        "1.  **Key Findings (3-4 bullet points):** List the most critical discoveries or conclusions.\n"
+        "2.  **Plain Language Summary:** Provide a concise, easy-to-understand paragraph (2-3 sentences) explaining the research and its significance.\n\n"
+        f"**Publication Content:**\n---\n{context}"
     )
     try:
-        resp = model.generate_content(prompt)
-        return resp.text
+        model = genai.GenerativeModel(MODEL_NAME)
+        response = model.generate_content(prompt)
+        return response.text
     except Exception as e:
-        return f"ERROR_GEMINI: {str(e)}"
+        return f"ERROR_GEMINI: The AI summary could not be generated. Reason: {str(e)}"
 
-# --------------------------- SIDEBAR (PDF Summaries) ---------------------------
-with st.sidebar:
-    st.header("📂 Upload PDFs to Summarize")
-    uploaded_files = st.file_uploader("Upload PDF files", type=["pdf"], accept_multiple_files=True)
-    if uploaded_files:
-        st.success(f"✅ {len(uploaded_files)} PDF(s) uploaded")
-        for uploaded_file in uploaded_files:
-            pdf_bytes = io.BytesIO(uploaded_file.read())
-            pdf_reader = PyPDF2.PdfReader(pdf_bytes)
-            text = "".join([p.extract_text() or "" for p in pdf_reader.pages])
-            with st.spinner(f"Summarizing: {uploaded_file.name} ..."):
-                summary = summarize_text_with_gemini(text)
-            st.markdown("### 📄 Summary:")
-            st.write(summary)
+# --- MAIN PAGE UI ---
 
-# --------------------------- MAIN PAGE ---------------------------
+# Load the dataset
+df = load_data("SB_publication_PMC.csv")
 
-# Title
-st.markdown("<h1 class='main-title'>Simplified Knowledge</h1>", unsafe_allow_html=True)
-st.markdown("<p class='subtitle'>A dynamic dashboard that summarizes NASA bioscience publications and explores impacts and results.</p>", unsafe_allow_html=True)
+st.title("Simplified Knowledge")
+st.markdown("<h3 style='text-align: center; color: #cccccc;'>Search, Discover, and Summarize NASA's Bioscience Publications</h3>", unsafe_allow_html=True)
 
-# Two main sections: Search (left) and Chat (right)
-left_col, right_col = st.columns([2, 1])
+# --- SEARCH BAR ---
+search_query = st.text_input(
+    "Enter a keyword to search all 608 NASA publications...",
+    placeholder="e.g., microgravity, radiation, Artemis, cell biology...",
+    key="search_box"
+)
 
-# --------------------------- SEARCH SECTION ---------------------------
-with left_col:
-    st.subheader("🔎 Search Publications")
-    query = st.text_input("Enter keyword to search publications (press Enter):", key="search_box", placeholder="Search NASA bioscience...")
-    
-    if query:
-        mask = df["Title"].astype(str).str.contains(query, case=False, na=False)
-        results = df[mask].reset_index(drop=True)
-        st.subheader(f"Results: {len(results)} matching titles")
-        if len(results) == 0:
-            st.info("No matching titles. Try broader keywords.")
+# --- DISPLAY RESULTS ---
+if search_query:
+    # Perform a case-insensitive search on the 'Title' column
+    mask = df["Title"].astype(str).str.contains(search_query, case=False, na=False)
+    results_df = df[mask].reset_index(drop=True)
+
+    st.markdown("---")
+    st.subheader(f"Found {len(results_df)} matching publications:")
+
+    if results_df.empty:
+        st.warning("No matching publications found. Please try a different keyword.")
     else:
-        results = pd.DataFrame(columns=df.columns) 
+        for idx, row in results_df.iterrows():
+            title = row["Title"]
+            link = row["Link"]
 
-    # Display results
-    for idx, row in results.iterrows():
-        title = row["Title"]
-        link = row["Link"]
-        st.markdown(f'<div class="result-card">', unsafe_allow_html=True)
-        st.markdown(f"**[{title}]({link})**")
-        cols = st.columns([3, 1, 1])
-        cols[0].write("")
-        if cols[1].button("🔗 Open", key=f"open_{idx}"):
-            st.markdown(f"[Open in new tab]({link})")
-        if cols[2].button("Gather & Summarize", key=f"summ_{idx}"):
-            with st.spinner("Gathering & extracting content..."):
-                extracted = fetch_url_text(link)
-            if extracted.startswith("ERROR"):
-                st.error(extracted)
-            else:
-                st.success("Content accessed — summarizing with Gemini...")
-                with st.spinner("Summarizing..."):
-                    summary = summarize_text_with_gemini(extracted)
-                st.markdown("**AI Summary:**")
-                st.write(summary)
-        st.markdown("</div>", unsafe_allow_html=True)
+            with st.container():
+                st.markdown(f'<div class="result-card">', unsafe_allow_html=True)
+                st.markdown(f"<h4><a href='{link}' target='_blank'>{title}</a></h4>", unsafe_allow_html=True)
 
-# --------------------------- CHAT SECTION ---------------------------
-with right_col:
-    st.subheader("💬 Chat with AI for quick answers!")
-    q = st.text_input("Ask a question!", key="chat_box", placeholder="Type anything...")
-    if q:
-        try:
-            resp = model.generate_content(q)  
-            st.subheader("Answer:")
-            st.write(resp.text)
-        except Exception as e:
-            st.error("AI chat failed: " + str(e))
+                # Use a unique key for each button by combining prefix and index
+                if st.button("🔬 Gather & Summarize", key=f"summarize_{idx}"):
+                    summary_placeholder = st.empty()
+                    with st.spinner("Accessing publication content... This may take a moment."):
+                        extracted_text = fetch_url_text(link)
+
+                    if extracted_text.startswith("ERROR"):
+                        summary_placeholder.error(extracted_text)
+                    else:
+                        summary_placeholder.info("Content retrieved successfully. Generating AI summary...")
+                        with st.spinner("🤖 Gemini AI is reading and summarizing the paper..."):
+                            summary = summarize_text_with_gemini(extracted_text)
+                            summary_placeholder.markdown(summary)
+
+                st.markdown("</div>", unsafe_allow_html=True)
+
+else:
+    st.info("The search bar is ready. Start typing to find relevant NASA research.")
