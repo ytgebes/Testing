@@ -11,6 +11,7 @@ import google.generativeai as genai
 st.set_page_config(page_title="Simplified Knowledge", layout="wide")
 
 try:
+    # Use st.secrets for security in deployment
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
     MODEL_NAME = "gemini-2.5-flash"
 except Exception as e:
@@ -22,12 +23,16 @@ if 'summary_content' not in st.session_state:
     st.session_state.summary_content = None
 if 'summary_title' not in st.session_state:
     st.session_state.summary_title = None
+# Added to track which item was clicked
+if 'summary_requested_idx' not in st.session_state:
+    st.session_state.summary_requested_idx = None
 
 # --- STYLING (Main Page) ---
 st.markdown("""
     <style>
     /* HIDE STREAMLIT'S DEFAULT NAVIGATION */
     [data-testid="stSidebar"] { display: none; }
+    /* REMOVE THIS LINE TO SHOW THE NAVIGATION BUTTONS IF NEEDED LATER */
     [data-testid="stPageLink"] { display: none; } 
 
     /* Push content to the top */
@@ -77,7 +82,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- HELPER FUNCTIONS (unchanged) ---
+# --- HELPER FUNCTIONS ---
 @st.cache_data
 def load_data(file_path): 
     try:
@@ -154,41 +159,73 @@ def search_page():
         if results_df.empty:
             st.warning("No matching publications found.")
         else:
-            st.session_state.summary_content = None
-            st.session_state.summary_title = None
+            # Only reset summary content/title if a NEW search is performed, otherwise keep it stable
+            if st.session_state.summary_content is not None and st.session_state.summary_requested_idx is not None:
+                # If a button was clicked, we keep the data; otherwise, we clear it for a new search
+                pass
+            else:
+                st.session_state.summary_content = None
+                st.session_state.summary_title = None
+                st.session_state.summary_requested_idx = None
+
 
             col_list = st.columns(2)
             col_idx = 0
             
             for idx, row in results_df.iterrows():
                 current_col = col_list[col_idx % 2]
+                
+                # Check if the current publication is the one that needs summarization
+                is_current_summary = (st.session_state.summary_requested_idx == idx)
+
                 with current_col:
                     with st.container():
                         st.markdown(f'<div class="result-card">', unsafe_allow_html=True)
                         st.markdown(f"**Title:** <a href='{row['Link']}' target='_blank'>{row['Title']}</a>", unsafe_allow_html=True)
                         
                         if st.button("🔬 Gather & Summarize", key=f"summarize_{idx}"):
-                            st.session_state.summary_title = row['Title']
                             
+                            # 1. Update state to reflect which item was clicked
+                            st.session_state.summary_title = row['Title']
+                            st.session_state.summary_requested_idx = idx
+                            st.session_state.summary_content = "Loading summary..." # Initial state for spinner
+
+                            # 2. Run the heavy lifting
                             with st.spinner(f"Accessing and summarizing: {row['Title']}..."):
-                                text = fetch_url_text(row['Link'])
-                                st.session_state.summary_content = summarize_text_with_gemini(text)
+                                try:
+                                    text = fetch_url_text(row['Link'])
+                                    summary = summarize_text_with_gemini(text)
+                                    st.session_state.summary_content = summary
+                                except Exception as e:
+                                    # Capture any unexpected critical errors
+                                    st.session_state.summary_content = f"CRITICAL_ERROR: {e}"
+
+                            # 3. Rerun the script to display the result outside the column
                             st.rerun() 
                             
                         st.markdown("</div>", unsafe_allow_html=True)
                 col_idx += 1
     
     # --- FULL-WIDTH SUMMARY DISPLAY ---
-    if st.session_state.summary_content:
+    # Only display if content exists AND it belongs to a clicked item index
+    if st.session_state.summary_content and st.session_state.summary_requested_idx is not None:
+        
         st.markdown("---")
         st.markdown(f'<div class="summary-card">', unsafe_allow_html=True)
-        st.markdown(f"## Summary for: {st.session_state.summary_title}")
-        st.markdown(st.session_state.summary_content)
+        
+        # Check for errors in the content
+        if st.session_state.summary_content.startswith("ERROR") or st.session_state.summary_content.startswith("CRITICAL_ERROR"):
+            st.markdown(f"## ❌ Failed to Summarize: {st.session_state.summary_title}")
+            st.error(f"Error fetching/summarizing content: {st.session_state.summary_content}")
+        else:
+            st.markdown(f"## 📄 Summary for: {st.session_state.summary_title}")
+            st.markdown(st.session_state.summary_content)
+            
         st.markdown("</div>", unsafe_allow_html=True)
 
 # --- NAVIGATION SETUP ---
 pg = st.navigation([
-    st.Page(search_page, title="Simplified Knowledge 🔍",),
+    st.Page(search_page, title="Simplified Knowledge 🔍"),
     st.Page("pages/Assistant_AI.py", title="Assistant AI 💬", icon="💬"),
 ])
 
