@@ -307,8 +307,9 @@ mention(
 df = pd.read_csv("SB_publication_PMC.csv")
 
 # ----------------- Translate dataset -----------------
-translate_dataset = st.checkbox(translated_strings["translate_dataset_checkbox"])
-if translate_dataset and original_cols and st.session_state.current_lang != "English":
+original_cols = list(df.columns)
+
+if st.session_state.current_lang != "English":
     translated_cols = translate_list_via_gemini(original_cols, st.session_state.current_lang)
     df.rename(columns=dict(zip(original_cols, translated_cols)), inplace=True)
 
