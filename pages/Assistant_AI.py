@@ -6,36 +6,26 @@ import google.generativeai as genai
 st.set_page_config(page_title="Assistant AI", page_icon="💬", layout="wide")
 
 try:
-    # Ensure you have the GEMINI_API_KEY in your Streamlit secrets
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
     MODEL_NAME = "gemini-2.5-flash"
 except Exception as e:
-    st.error(f"Error configuring Gemini AI. Make sure 'GEMINI_API_KEY' is set in st.secrets: {e}")
+    st.error(f"Error configuring Gemini AI: {e}")
     st.stop()
 
 # --- STYLING ---
 st.markdown("""
     <style>
-    /* HIDE STREAMLIT'S DEFAULT NAVIGATION */
+    /* HIDE STREAMLIT'S DEFAULT NAVIGATION (This is the hamburger menu/sidebar) */
     [data-testid="stSidebar"] { display: none; }
-
+    /* This also hides the auto-generated navigation menu */
+    [data-testid="stPageLink"] { display: none; } 
+    
     /* Push content to the top */
     .block-container { padding-top: 1rem !important; }
     
-    /* Nav button container aligned to the left */
-    .nav-container {
-        display: flex;
-        justify-content: flex-start; /* Aligns button to the left */
-        padding-top: 1.5rem;
-        padding-bottom: 1rem;
-    }
-    .nav-button a {
-        background-color: #6c757d; color: white; padding: 10px 20px;
-        border-radius: 8px; text-decoration: none; font-weight: bold;
-        transition: background-color 0.3s ease;
-    }
-    .nav-button a:hover { background-color: #5a6268; }
-
+    /* Remove custom nav button styling as we now use st.navigation */
+    .nav-container { display: none; } 
+    
     /* Main Theme */
     body { background-color: #FFFFFF; color: #333333; }
     h1 { color: #000000; text-align: center; }
@@ -47,15 +37,14 @@ st.markdown("""
 # --- HELPER FUNCTIONS ---
 @st.cache_data
 def load_data(file_path):
-    """Loads the publication data for the RAG search."""
     try:
-        return pd.read_csv(file_path, usecols=['Title', 'Link'])
+        # Assuming the CSV is in the root directory relative to where the app is run
+        return pd.read_csv("SB_publication_PMC.csv", usecols=['Title', 'Link']) 
     except (FileNotFoundError, ValueError):
-        st.error("Error: Could not load the publication data file.")
+        st.error("Error: Could not load the publication data file (SB_publication_PMC.csv).")
         st.stop()
 
 def find_relevant_publications(query, df, top_k=5):
-    """Finds publications whose titles contain the query string."""
     if query:
         mask = df["Title"].astype(str).str.lower().str.contains(query.lower(), na=False)
         return df[mask].head(top_k)
@@ -66,11 +55,7 @@ def find_relevant_publications(query, df, top_k=5):
 # Load data once
 df = load_data("SB_publication_PMC.csv")
 
-# --- NAVIGATION BUTTON (Points to / to go back to the main page) ---
-st.markdown(
-    '<div class="nav-container"><div class="nav-button"><a href="/" target="_self">⬅️ Back to Search</a></div></div>',
-    unsafe_allow_html=True
-)
+# NOTE: Removed the st.markdown for the "⬅️ Back to Search" button as st.navigation handles it.
 
 st.title("Assistant AI")
 st.markdown("<p style='text-align: center;'>Ask me anything about the **608 NASA bioscience publications**.</p>", unsafe_allow_html=True)
@@ -81,7 +66,6 @@ with col2:
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
-    # Display chat messages from history
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
@@ -95,7 +79,6 @@ with col2:
             placeholder = st.empty()
             with st.spinner("Searching publications and formulating answer..."):
                 
-                # 1. Retrieval Step (RAG)
                 relevant_pubs = find_relevant_publications(prompt, df)
                 
                 context_str = "No specific publications found matching the search terms in the question."
@@ -104,7 +87,6 @@ with col2:
                     for _, row in relevant_pubs.iterrows():
                         context_str += f"- **Title:** {row['Title']}\n  - *Link:* {row['Link']}\n"
                 
-                # 2. Generation Step
                 full_prompt = (
                     "You are a specialized AI assistant for NASA's bioscience research. "
                     "Answer the user's question based *only* on the context provided below. "
@@ -115,7 +97,6 @@ with col2:
                 )
                 
                 try:
-                    # 🟢 FIX: Using genai.GenerativeModel directly after genai.configure()
                     model = genai.GenerativeModel(MODEL_NAME)
                     response = model.generate_content(full_prompt)
                     ai_response = response.text
@@ -124,5 +105,4 @@ with col2:
                 
                 placeholder.markdown(ai_response)
         
-        # Note: You had a typo here: 'content: ai_response' -> '"content": ai_response'
         st.session_state.messages.append({"role": "assistant", "content": ai_response})
