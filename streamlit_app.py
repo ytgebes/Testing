@@ -22,14 +22,13 @@ st.markdown("""
     <style>
     /* HIDE STREAMLIT'S DEFAULT NAVIGATION (This is the sidebar hamburger menu) */
     [data-testid="stSidebar"] { display: none; }
-    /* HIDE THE AUTO-GENERATED LINKS FROM st.navigation */
-    [data-testid="stPageLink"] { display: none; } 
+    
+    /* 🟢 FIX 1: REMOVE CSS HIDING st.page_link */
+    /* [data-testid="stPageLink"] { display: none; } */ 
+    /* The link will now show */
 
     /* Push content to the top */
     .block-container { padding-top: 1rem !important; }
-
-    /* REMOVE custom Nav button styling as st.navigation handles it now */
-    .nav-container { display: none; }
 
     /* Main Theme */
     h1, h3 { text-align: center; }
@@ -50,13 +49,14 @@ st.markdown("""
         box-shadow: 0 2px 4px rgba(0,0,0,0.05);
     }
     
-    /* 🟢 FIX 1: Increase Title Font Size */
+    /* Increase Title Font Size */
     .result-card a { 
         font-size: 1.15em; 
-        display: block; /* Makes the whole link block level for better spacing */
-        margin-bottom: 10px; /* Space below title */
+        display: block; 
+        margin-bottom: 10px; 
     }
 
+    /* Summary Card Container (The outer container that is NOT the summary-display) */
     .summary-card { 
         background-color: #E6F0FF; 
         padding: 2rem; 
@@ -72,27 +72,26 @@ st.markdown("""
     /* BUTTON: Now uses a smaller width in single column and aligns left */
     .stButton>button {
         border-radius: 8px; 
-        width: auto; /* Allow button to size to content */
-        min-width: 200px; /* Ensure a minimum size */
+        width: auto; 
+        min-width: 200px; 
         background-color: #E6E0FF;
         color: #4F2083; border: 1px solid #C5B3FF; font-weight: bold;
-        /* Align button to the left within the card */
         display: block; 
     }
     .stButton>button:hover { background-color: #D6C9FF; border: 1px solid #B098FF; }
     
-    /* Summary text inside the card */
+    /* 🟢 FIX 2: Remove styling for the inner summary box (summary-display) */
     .summary-display {
-        background-color: #FFF; 
-        padding: 1rem; 
-        border-radius: 8px;
-        border: 1px solid #CCC;
+        /* background-color: #FFF; */ /* REMOVED */
+        padding: 0; /* REMOVED */
+        /* border-radius: 8px; */ /* REMOVED */
+        border: none; /* REMOVED */
         margin-top: 1rem;
     }
     </style>
 """, unsafe_allow_html=True)
 
-# --- HELPER FUNCTIONS ---
+# --- HELPER FUNCTIONS (UNCHANGED) ---
 @st.cache_data
 def load_data(file_path): 
     """Loads the publication data."""
@@ -148,7 +147,8 @@ def summarize_text_with_gemini(text: str):
 
 # --- MAIN PAGE FUNCTION ---
 def search_page():
-    # 🟢 FIX 3: Ensure the Assistant AI link is displayed 
+    # --- NAVIGATION LINK ---
+    # This link should now be visible due to the CSS fix.
     st.page_link("pages/Assistant_AI.py", label="Assistant AI 💬", icon="💬")
     
     # --- UI Header ---
@@ -168,32 +168,27 @@ def search_page():
         if results_df.empty:
             st.warning("No matching publications found.")
         else:
-            # Initialize or clear the summary stored in session state when a new search runs
             if 'summary_dict' not in st.session_state:
                  st.session_state.summary_dict = {}
-            # Do NOT clear the dict here, only clear upon search query change if you want summaries to persist after scrolling.
-            # We'll clear the dict inside the button press logic if the button is pressed on a different item.
-
+            
             # SINGLE COLUMN DISPLAY LOOP
             for idx, row in results_df.iterrows():
-                # Use a specific key for this publication's summary
                 summary_key = f"summary_{idx}"
                 
                 with st.container():
                     st.markdown(f'<div class="result-card">', unsafe_allow_html=True)
                     
-                    # 🟢 FIX 2: Display title first with custom styling
+                    # Display title first with custom styling
                     st.markdown(f"**Title:** <a href='{row['Link']}' target='_blank'>{row['Title']}</a>", unsafe_allow_html=True)
                     
-                    # 🟢 FIX 2: Place button immediately below title
+                    # Place button immediately below title
                     if st.button("🔬 Gather & Summarize", key=f"btn_summarize_{idx}"):
                         
-                        # 1. GENERATE SUMMARY IMMEDIATELY UPON CLICK
+                        # GENERATE SUMMARY IMMEDIATELY UPON CLICK
                         with st.spinner(f"Accessing and summarizing: {row['Title']}..."):
                             try:
                                 text = fetch_url_text(row['Link'])
                                 summary = summarize_text_with_gemini(text)
-                                # Store the result in session state
                                 st.session_state.summary_dict[summary_key] = summary
                             except Exception as e:
                                 st.session_state.summary_dict[summary_key] = f"**Critical Error during summarization:** {e}. Please check the link and API key."
@@ -202,17 +197,21 @@ def search_page():
                         # after the long operation has updated the session state.
                         st.rerun()
 
-                    # 2. DISPLAY SUMMARY IF IT EXISTS FOR THIS PUBLICATION
+                    # DISPLAY SUMMARY IF IT EXISTS FOR THIS PUBLICATION
                     if summary_key in st.session_state.summary_dict:
                         summary_content = st.session_state.summary_dict[summary_key]
                         
+                        # 🟢 FIX 2: Use summary-display class, but the CSS is now neutral
                         st.markdown('<div class="summary-display">', unsafe_allow_html=True)
+                        st.markdown(f"---", unsafe_allow_html=True) # Separator for cleaner look
+                        
                         if "Critical Error" in summary_content or summary_content.startswith("ERROR"):
                             st.markdown(f"**❌ Failed to Summarize:** *{row['Title']}*", unsafe_allow_html=True)
                             st.markdown(f"**Error Details:** {summary_content}")
                         else:
                             st.markdown(f"**📄 Summary for:** *{row['Title']}*", unsafe_allow_html=True)
                             st.markdown(summary_content)
+                            
                         st.markdown('</div>', unsafe_allow_html=True)
                             
                     st.markdown("</div>", unsafe_allow_html=True)
@@ -221,7 +220,6 @@ def search_page():
     
 
 # --- NAVIGATION SETUP ---
-# Keep st.navigation to register the pages
 pg = st.navigation([
     st.Page(search_page, title="Simplified Knowledge 🔍", icon="🏠"),
     st.Page("pages/Assistant_AI.py", title="Assistant AI 💬", icon="💬"),
