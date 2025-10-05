@@ -21,6 +21,10 @@ except Exception as e:
 # --- INITIALIZE SESSION STATE ---
 if 'summary_dict' not in st.session_state:
     st.session_state.summary_dict = {}
+if "current_lang" not in st.session_state:
+    st.session_state.current_lang = "English"
+if "translations" not in st.session_state:
+    st.session_state.translations = {"English": UI_STRINGS_EN.copy()}
 
 # --- STYLING (Main Page) ---
 st.markdown("""
@@ -277,6 +281,50 @@ pg = st.navigation([
 ])
 
 pg.run()    
+
+_, lang_col = st.columns([5, 1.5]) 
+
+#LANGUAGE
+with lang_col:
+    # Language selection dropdown (selectbox)
+    lang_choice = st.selectbox(
+        "🌐 Choose language",
+        options=list(LANGUAGES.keys()),
+        format_func=lambda x: LANGUAGES[x]["label"],
+        index=list(LANGUAGES.keys()).index(st.session_state.current_lang),
+        label_visibility="visible" # Ensure the label is visible outside the compact sidebar
+    )
+
+# --- Translation Logic (Immediately follows the selectbox creation) ---
+if lang_choice != st.session_state.current_lang:
+    # rain() and st.spinner() are kept, but the spinner will now appear on the main page.
+    rain(emoji="⏳", font_size=54, falling_speed=5, animation_length=2)
+    with st.spinner(f"Translating UI to {lang_choice}..."):
+        try:
+            if lang_choice in st.session_state.translations:
+                translated_strings = st.session_state.translations[lang_choice]
+            else:
+                translated_strings = translate_dict_via_gemini(
+                    st.session_state.translations["English"],
+                    lang_choice
+                )
+                st.session_state.translations[lang_choice] = translated_strings
+            st.session_state.current_lang = lang_choice
+        except Exception as e:
+            st.error("Translation failed — using English. Error: " + str(e))
+            # Fallback to English
+            translated_strings = st.session_state.translations["English"]
+            st.session_state.current_lang = "English"
+else:
+    translated_strings = st.session_state.translations[st.session_state.current_lang]
+
+# --- PDF UPLOAD (Must be handled separately now that the main sidebar block is gone) ---
+# The PDF upload functionality that was in the sidebar needs a new home.
+# We will put it back in the sidebar for tidiness, but without the translation logic.
+with st.sidebar:
+    st.markdown("<h3 style='margin: 0; padding: 0;'>Upload PDFs to Summarize</h3>", unsafe_allow_html=True)
+    uploaded_files = st.file_uploader(label="", type=["pdf"], accept_multiple_files=True)
+    # The code that *uses* uploaded_files stays in the main area below.
 
 # Languages
 LANGUAGES = {
