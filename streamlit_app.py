@@ -62,6 +62,13 @@ LANGUAGES = {
     "日本語": {"label": "日本語 (Japanese)", "code": "ja"},
     "한국어": {"label": "한국어 (Korean)", "code": "ko"},
     "हिन्दी": {"label": "हिन्दी (Hindi)", "code": "hi"},
+    "English": "en",
+    "Spanish": "es",
+    "French": "fr",
+    "German": "de",
+    "Italian": "it",
+    "Japanese": "ja",
+    "Mandarin (Simplified)": "zh-CN",
 }
 
 
@@ -197,10 +204,82 @@ st.markdown("""
         margin-top: 15px;
         margin-bottom: 5px;
         font-size: 1.3em;
+
+    .block-container { 
+        display: flex;
+        flex-direction: column; /* Keep main content vertical */
+    }
+    .language-dropdown-column {
+        /* This class will be applied to the column wrapper */
+        position: absolute;
+        top: 30px; /* Adjust this value to set the distance from the top */
+        right: 20px; /* Adjust this value to set the distance from the right */
+        z-index: 100; /* Ensure it floats above other elements */
+        width: 200px; /* Set a fixed width for the selectbox */
+    }
+
+    /* Styling the Dropdown (White/Light Purple Theme) */
+    .language-dropdown-column .stSelectbox {
+        background-color: white; /* White background for the entire widget */
+        border-radius: 8px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1); /* Slightly stronger shadow for floating element */
+        border: 1px solid #C5B3FF; /* Light purple border */
+    }
+
+    /* Hide the default Streamlit label as it might look odd floating */
+    .language-dropdown-column label {
+        display: none !important; 
+   
+   }
+    /* Style the actual dropdown input area (the 'button' part) */
+    .language-dropdown-column .stSelectbox .st-bd { 
+        background-color: #F8F7FF; /* Very light purple/off-white background */
+        color: #4F2083; /* Dark purple text */
+        border: none; /* Remove inner border, using the container's border */
+        border-radius: 8px;
+        padding: 10px 15px;
+        font-size: 16px;
+        font-weight: 600;
+        transition: background-color 0.3s ease;
+    }
+    
+   .language-dropdown-column .stSelectbox .st-bd:hover {
+        background-color: #E6E0FF; /* Lighter purple on hover */
+    
+    .language-dropdown-column .stSelectbox [data-testid="stTriangle"] {
+        color: #6A1B9A; /* Purple color for the dropdown arrow */
+    }
+    data-testid="stSidebar"] { display: none; }
+
     }
     </style>
 """, unsafe_allow_html=True)
 
+_, col_language = st.columns([10, 1]) # Large empty column (10) and a small column (1) for the dropdown
+with col_language:
+    st.markdown('<div class="language-dropdown-column">', unsafe_allow_html=True)
+    selected_language_name = st.selectbox(
+        "Select Target Language", # Label is still needed for st.selectbox,
+        list(LANGUAGES.keys()),
+        index=0, 
+        key="language_selector"
+    )
+    
+    st.markdown('</div>', unsafe_allow_html=True)
+
+# Get the language code
+selected_language_code = LANGUAGES[selected_language_name]
+
+# --- Demonstration of Use (Main Content) ---
+
+st.title("Your Application Title Here")
+st.markdown("---")
+st.write(f"The content below would be displayed in the selected language.")
+st.info(f"Language Selector Status: **{selected_language_name}** (Code: **{selected_language_code}**)")
+
+# Example Content
+st.header("Main Content Area 📄")
+st.write("This is the main body of your Streamlit application, which now flows beneath the floating language selector in the top-right corner.")
 
 # --- HELPER FUNCTIONS (Copied from original) ---
 @st.cache_data
