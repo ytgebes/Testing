@@ -17,37 +17,19 @@ except Exception as e:
     st.error(f"Error configuring Gemini AI: {e}")
     st.stop()
 
-# --- INITIALIZE SESSION STATE ---
-# This holds the summary content to be displayed below the columns
-if 'summary_content' not in st.session_state:
-    st.session_state.summary_content = None
-if 'summary_title' not in st.session_state:
-    st.session_state.summary_title = None
-
 # --- STYLING ---
 st.markdown("""
     <style>
-    /* HIDE STREAMLIT'S DEFAULT NAVIGATION (This is the hamburger menu/sidebar) */
+    /* HIDE STREAMLIT'S DEFAULT NAVIGATION (This is the sidebar hamburger menu) */
     [data-testid="stSidebar"] { display: none; }
-    /* This also hides the auto-generated navigation menu */
+    /* HIDE THE AUTO-GENERATED LINKS FROM st.navigation */
     [data-testid="stPageLink"] { display: none; } 
 
     /* Push content to the top */
     .block-container { padding-top: 1rem !important; }
 
-    /* Custom Nav button container for the top-left */
-    .nav-container {
-        display: flex;
-        justify-content: flex-start;
-        padding-top: 2rem; /* PUSHES BUTTON DOWN */
-        padding-bottom: 2rem;
-    }
-    .nav-button a {
-        background-color: #7B1AF3; color: white; padding: 10px 20px;
-        border-radius: 8px; text-decoration: none; font-weight: bold;
-        transition: background-color 0.3s ease;
-    }
-    .nav-button a:hover { background-color: #5F09C1; }
+    /* REMOVE custom Nav button styling as st.navigation handles it now */
+    .nav-container { display: none; }
 
     /* Main Theme */
     h1, h3 { text-align: center; }
@@ -57,12 +39,13 @@ st.markdown("""
         color: #000000 !important; background-color: #F0F2F6 !important;
         border: 1px solid #CCCCCC !important; border-radius: 8px; padding: 14px;
     }
+    /* RESULT CARD: Remains the same, now takes full width */
     .result-card {
         background-color: #FAFAFA; padding: 1.5rem; border-radius: 10px;
         margin-bottom: 1rem; border: 1px solid #E0E0E0;
         box-shadow: 0 2px 4px rgba(0,0,0,0.05);
     }
-    .summary-card { /* New style for the full-width summary */
+    .summary-card { 
         background-color: #E6F0FF; 
         padding: 2rem; 
         border-radius: 10px; 
@@ -71,21 +54,42 @@ st.markdown("""
     }
     a { color: #6A1B9A; text-decoration: none; font-weight: bold; }
     a:hover { text-decoration: underline; }
+    /* BUTTON: Uses a smaller width in single column */
     .stButton>button {
-        border-radius: 8px; width: 100%; background-color: #E6E0FF;
+        border-radius: 8px; 
+        width: 50%; 
+        min-width: 250px; 
+        background-color: #E6E0FF;
         color: #4F2083; border: 1px solid #C5B3FF; font-weight: bold;
     }
     .stButton>button:hover { background-color: #D6C9FF; border: 1px solid #B098FF; }
+    /* Summary text inside the card */
+    .summary-display {
+        background-color: #FFF; /* Use white background inside the result card */
+        padding: 1rem; 
+        border-radius: 8px;
+        border: 1px solid #CCC;
+        margin-top: 1rem;
+    }
     </style>
 """, unsafe_allow_html=True)
 
 # --- HELPER FUNCTIONS ---
 @st.cache_data
-def load_data(file_path): return pd.read_csv(file_path)
+def load_data(file_path): 
+    """Loads the publication data."""
+    try:
+        return pd.read_csv(file_path)
+    except FileNotFoundError:
+        st.error(f"File not found: {file_path}. Please ensure 'SB_publication_PMC.csv' is in the directory.")
+        st.stop()
+    except Exception as e:
+        st.error(f"Error loading data: {e}")
+        st.stop()
 
 @lru_cache(maxsize=128)
 def fetch_url_text(url: str):
-    # ... (Keep this function exactly as it is) ...
+    """Fetches text content from a URL, handling HTML and basic PDF parsing."""
     try:
         headers = {"User-Agent": "Mozilla/5.0"}
         r = requests.get(url, headers=headers, timeout=20)
@@ -126,11 +130,8 @@ def summarize_text_with_gemini(text: str):
 
 # --- MAIN PAGE FUNCTION ---
 def search_page():
-    # --- NAVIGATION BUTTON (Custom HTML link) ---
-    st.markdown(
-        '<div class="nav-container"><div class="nav-button"><a href="/Assistant_AI" target="_self">Assistant AI 💬</a></div></div>',
-        unsafe_allow_html=True
-    )
+    # --- NAVIGATION LINK ---
+    st.page_link("pages/Assistant_AI.py", label="Assistant AI 💬", icon="💬")
     
     # --- UI Header ---
     df = load_data("SB_publication_PMC.csv")
@@ -149,51 +150,58 @@ def search_page():
         if results_df.empty:
             st.warning("No matching publications found.")
         else:
-            # Clear previous summary content when a new search is run
-            st.session_state.summary_content = None
-            st.session_state.summary_title = None
+            # Initialize or clear the summary stored in session state when a new search runs
+            if 'summary_dict' not in st.session_state:
+                 st.session_state.summary_dict = {}
+            st.session_state.summary_dict = {}
 
-            col_list = st.columns(2)
-            col_idx = 0
-            
+            # SINGLE COLUMN DISPLAY LOOP
             for idx, row in results_df.iterrows():
-                current_col = col_list[col_idx % 2]
-                with current_col:
-                    with st.container():
-                        st.markdown(f'<div class="result-card">', unsafe_allow_html=True)
-                        st.markdown(f"**Title:** <a href='{row['Link']}' target='_blank'>{row['Title']}</a>", unsafe_allow_html=True)
-                        
-                        # Use a function to set the state on button click
-                        if st.button("🔬 Gather & Summarize", key=f"summarize_{idx}"):
-                            # Set the title placeholder
-                            st.session_state.summary_title = row['Title']
+                # Use a specific key for this publication's summary
+                summary_key = f"summary_{idx}"
+                
+                with st.container():
+                    st.markdown(f'<div class="result-card">', unsafe_allow_html=True)
+                    st.markdown(f"**Title:** <a href='{row['Link']}' target='_blank'>{row['Title']}</a>", unsafe_allow_html=True)
+                    
+                    # Center the button 
+                    col_spacer, col_btn, col_spacer_2 = st.columns([1, 2, 1])
+                    with col_btn:
+                        if st.button("🔬 Gather & Summarize", key=f"btn_summarize_{idx}"):
                             
-                            # Run the summarization and store the result
+                            # 1. GENERATE SUMMARY IMMEDIATELY UPON CLICK
                             with st.spinner(f"Accessing and summarizing: {row['Title']}..."):
-                                text = fetch_url_text(row['Link'])
-                                st.session_state.summary_content = summarize_text_with_gemini(text)
-                            # Rerun the script to display the result outside the column
-                            st.rerun() 
+                                try:
+                                    text = fetch_url_text(row['Link'])
+                                    summary = summarize_text_with_gemini(text)
+                                    st.session_state.summary_dict[summary_key] = summary
+                                except Exception as e:
+                                    st.session_state.summary_dict[summary_key] = f"**Critical Error during summarization:** {e}. Please check the link and API key."
                             
-                        st.markdown("</div>", unsafe_allow_html=True)
-                col_idx += 1
+                            # No st.rerun() needed. The script will simply continue/finish the run cycle.
+
+                    # 2. DISPLAY SUMMARY IF IT EXISTS FOR THIS PUBLICATION
+                    if summary_key in st.session_state.summary_dict:
+                        summary_content = st.session_state.summary_dict[summary_key]
+                        
+                        st.markdown('<div class="summary-display">', unsafe_allow_html=True)
+                        if "Critical Error" in summary_content:
+                            st.markdown(f"**❌ Failed to Summarize:** *{row['Title']}*", unsafe_allow_html=True)
+                            st.markdown(summary_content)
+                        else:
+                            st.markdown(f"**📄 Summary for:** *{row['Title']}*", unsafe_allow_html=True)
+                            st.markdown(summary_content)
+                        st.markdown('</div>', unsafe_allow_html=True)
+                            
+                    st.markdown("</div>", unsafe_allow_html=True)
+                    # Add space between cards
+                    st.write("") 
     
-    # --- FULL-WIDTH SUMMARY DISPLAY ---
-    # This check is performed outside the search_query block and outside the columns
-    if st.session_state.summary_content:
-        st.markdown("---")
-        st.markdown(f'<div class="summary-card">', unsafe_allow_html=True)
-        st.markdown(f"## 📄 Summary for: {st.session_state.summary_title}")
-        st.markdown(st.session_state.summary_content)
-        st.markdown("</div>", unsafe_allow_html=True)
 
 # --- NAVIGATION SETUP ---
-
-# This structure enables multi-page navigation correctly
 pg = st.navigation([
-    st.Page(search_page, title="Simplified Knowledge 🔍", icon="🏠"), # This is the main page function
-    st.Page("pages/Assistant_AI.py", title="Assistant AI 💬", icon="💬"), # This references the file in the pages folder
+    st.Page(search_page, title="Simplified Knowledge 🔍", icon="🏠"),
+    st.Page("pages/Assistant_AI.py", title="Assistant AI 💬", icon="💬"),
 ])
 
-# Run the navigation
 pg.run()
