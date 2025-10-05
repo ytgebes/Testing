@@ -11,34 +11,28 @@ import google.generativeai as genai
 st.set_page_config(page_title="Simplified Knowledge", layout="wide")
 
 try:
+    # Ensure you have the GEMINI_API_KEY in your Streamlit secrets
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
     MODEL_NAME = "gemini-2.5-flash"
 except Exception as e:
-    st.error(f"Error configuring Gemini AI: {e}")
+    st.error(f"Error configuring Gemini AI. Make sure 'GEMINI_API_KEY' is set in st.secrets: {e}")
     st.stop()
 
-# --- INITIALIZE SESSION STATE ---
-if 'summary_content' not in st.session_state:
-    st.session_state.summary_content = None
-if 'summary_title' not in st.session_state:
-    st.session_state.summary_title = None
-
-# --- STYLING (Main Page) ---
+# --- STYLING (HEIGHT FIX APPLIED HERE) ---
 st.markdown("""
     <style>
     /* HIDE STREAMLIT'S DEFAULT NAVIGATION */
     [data-testid="stSidebar"] { display: none; }
-    [data-testid="stPageLink"] { display: none; } 
 
     /* Push content to the top */
     .block-container { padding-top: 1rem !important; }
 
-    /* Custom Nav button container for the top-left */
+    /* Nav button container aligned to the left */
     .nav-container {
         display: flex;
-        justify-content: flex-start;
-        padding-top: 2rem; 
-        padding-bottom: 2rem;
+        justify-content: flex-start; /* Aligns button to the left */
+        padding-top: 2rem; /* 👈 INCREASED PADDING TO PUSH BUTTON DOWN */
+        padding-bottom: 2rem; /* Adds space below the button */
     }
     .nav-button a {
         background-color: #7B1AF3; color: white; padding: 10px 20px;
@@ -48,6 +42,7 @@ st.markdown("""
     .nav-button a:hover { background-color: #5F09C1; }
 
     /* Main Theme */
+    body { background-color: #FFFFFF; color: #333333; }
     h1, h3 { text-align: center; }
     h1 { font-size: 4.5em !important; padding-bottom: 0.5rem; color: #000000; }
     h3 { color: #333333; }
@@ -60,13 +55,6 @@ st.markdown("""
         margin-bottom: 1rem; border: 1px solid #E0E0E0;
         box-shadow: 0 2px 4px rgba(0,0,0,0.05);
     }
-    .summary-card {
-        background-color: #E6F0FF; 
-        padding: 2rem; 
-        border-radius: 10px; 
-        margin-top: 2rem;
-        border: 2px solid #6A1B9A;
-    }
     a { color: #6A1B9A; text-decoration: none; font-weight: bold; }
     a:hover { text-decoration: underline; }
     .stButton>button {
@@ -77,9 +65,17 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- HELPER FUNCTIONS (unchanged) ---
+# --- NAVIGATION BUTTON ---
+# Assumes the second file is saved as Assistant_AI.py or you are using multi-page setup
+st.markdown(
+    '<div class="nav-container"><div class="nav-button"><a href="/Assistant_AI" target="_self">Assistant AI 💬</a></div></div>',
+    unsafe_allow_html=True
+)
+
+# --- HELPER FUNCTIONS ---
 @st.cache_data
 def load_data(file_path): 
+    """Loads the publication data."""
     try:
         return pd.read_csv(file_path)
     except FileNotFoundError:
@@ -91,7 +87,7 @@ def load_data(file_path):
 
 @lru_cache(maxsize=128)
 def fetch_url_text(url: str):
-    # ... (Keep this function exactly as it is) ...
+    """Fetches text content from a URL, handling HTML and basic PDF parsing."""
     try:
         headers = {"User-Agent": "Mozilla/5.0"}
         r = requests.get(url, headers=headers, timeout=20)
@@ -112,84 +108,65 @@ def fetch_url_text(url: str):
         try:
             soup = BeautifulSoup(r.text, "html.parser")
             for tag in soup(['script', 'style']): tag.decompose()
+            # Limit text length for API
             return " ".join(soup.body.get_text(separator=" ", strip=True).split())[:25000]
         except Exception as e: 
             return f"ERROR_HTML_PARSE: {e}"
 
 def summarize_text_with_gemini(text: str):
+    """Generates a summary using the Gemini API."""
     if not text or text.startswith("ERROR"): 
         return f"Could not summarize due to a content error: {text.split(': ')[-1]}"
 
     prompt = (f"Summarize this NASA bioscience paper. Output in clean Markdown with a section titled 'Key Findings' (using bullet points) and a section titled 'Overview Summary' (using a paragraph).\n\nContent:\n{text}")
     
     try:
-        model = genai.GenerativeModel(MODEL_NAME)
-        response = model.generate_content(prompt)
+        client = genai.Client()
+        response = client.models.generate_content(
+            model=MODEL_NAME, 
+            contents=prompt
+        )
         return response.text
     except Exception as e: 
         return f"ERROR_GEMINI: {e}"
 
-# --- MAIN PAGE FUNCTION ---
-def search_page():
-    # --- NAVIGATION BUTTON (Custom HTML link) ---
-    st.markdown(
-        '<div class="nav-container"><div class="nav-button"><a href="/Assistant_AI" target="_self">Assistant AI 💬</a></div></div>',
-        unsafe_allow_html=True
-    )
-    
-    # --- UI Header ---
-    df = load_data("SB_publication_PMC.csv")
-    st.markdown('<h1>Simplified <span style="color: #6A1B9A;">Knowledge</span></h1>', unsafe_allow_html=True)
-    st.markdown("### Search, Discover, and Summarize NASA's Bioscience Publications")
+# --- MAIN PAGE UI ---
+df = load_data("SB_publication_PMC.csv")
 
-    search_query = st.text_input("Search publications...", placeholder="e.g., microgravity, radiation, Artemis...", label_visibility="collapsed")
+st.markdown('<h1>Simplified <span style="color: #6A1B9A;">Knowledge</span></h1>', unsafe_allow_html=True)
+st.markdown("### Search, Discover, and Summarize NASA's Bioscience Publications")
+
+search_query = st.text_input("Search publications...", placeholder="e.g., microgravity, radiation, Artemis...", label_visibility="collapsed")
+
+if search_query:
+    mask = df["Title"].astype(str).str.contains(search_query, case=False, na=False)
+    results_df = df[mask].reset_index(drop=True)
+    st.markdown("---")
+    st.subheader(f"Found {len(results_df)} matching publications:")
     
-    # --- Search Logic ---
-    if search_query:
-        mask = df["Title"].astype(str).str.contains(search_query, case=False, na=False)
-        results_df = df[mask].reset_index(drop=True)
-        st.markdown("---")
-        st.subheader(f"Found {len(results_df)} matching publications:")
+    if results_df.empty:
+        st.warning("No matching publications found.")
+    else:
+        # Use columns for layout to keep the UI clean
+        col_list = st.columns(2)
+        col_idx = 0
         
-        if results_df.empty:
-            st.warning("No matching publications found.")
-        else:
-            st.session_state.summary_content = None
-            st.session_state.summary_title = None
-
-            col_list = st.columns(2)
-            col_idx = 0
-            
-            for idx, row in results_df.iterrows():
-                current_col = col_list[col_idx % 2]
-                with current_col:
-                    with st.container():
-                        st.markdown(f'<div class="result-card">', unsafe_allow_html=True)
-                        st.markdown(f"**Title:** <a href='{row['Link']}' target='_blank'>{row['Title']}</a>", unsafe_allow_html=True)
-                        
-                        if st.button("🔬 Gather & Summarize", key=f"summarize_{idx}"):
-                            st.session_state.summary_title = row['Title']
-                            
-                            with st.spinner(f"Accessing and summarizing: {row['Title']}..."):
+        for idx, row in results_df.iterrows():
+            current_col = col_list[col_idx % 2]
+            with current_col:
+                with st.container():
+                    st.markdown(f'<div class="result-card">', unsafe_allow_html=True)
+                    st.markdown(f"**Title:** <a href='{row['Link']}' target='_blank'>{row['Title']}</a>", unsafe_allow_html=True)
+                    
+                    # Create a unique key for the button
+                    if st.button("🔬 Gather & Summarize", key=f"summarize_{idx}"):
+                        # Display loading and results in a clean area
+                        summary_placeholder = st.empty()
+                        with summary_placeholder.container():
+                            with st.spinner("Accessing and summarizing content..."):
                                 text = fetch_url_text(row['Link'])
-                                st.session_state.summary_content = summarize_text_with_gemini(text)
-                            st.rerun() 
-                            
-                        st.markdown("</div>", unsafe_allow_html=True)
-                col_idx += 1
-    
-    # --- FULL-WIDTH SUMMARY DISPLAY ---
-    if st.session_state.summary_content:
-        st.markdown("---")
-        st.markdown(f'<div class="summary-card">', unsafe_allow_html=True)
-        st.markdown(f"## 📄 Summary for: {st.session_state.summary_title}")
-        st.markdown(st.session_state.summary_content)
-        st.markdown("</div>", unsafe_allow_html=True)
-
-# --- NAVIGATION SETUP ---
-pg = st.navigation([
-    st.Page(search_page, title="Simplified Knowledge 🔍", icon="🏠"),
-    st.Page("pages/Assistant_AI.py", title="Assistant AI 💬", icon="💬"),
-])
-
-pg.run()
+                                summary = summarize_text_with_gemini(text)
+                                st.markdown(summary)
+                    
+                    st.markdown("</div>", unsafe_allow_html=True)
+            col_idx += 1
