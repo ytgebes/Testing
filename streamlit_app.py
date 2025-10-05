@@ -29,8 +29,8 @@ st.markdown("""
     .nav-container-ai {
         display: flex;
         justify-content: flex-start;
-        padding-top: 1rem; 
-        padding-bottom: 3rem;
+        padding-top: 3rem; 
+        padding-bottom: 0rem;
     }
     .nav-button-ai a {
         background-color: #6A1B9A; /* Purple color */
