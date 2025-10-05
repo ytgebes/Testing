@@ -10,6 +10,7 @@ from functools import lru_cache
 from streamlit_extras.let_it_rain import rain
 from streamlit_extras.mention import mention
 import google.generativeai as genai
+MODEL_NAME = "gemini-2.5-flash"
 
 # ----------------- Configure Gemini API -----------------
 genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
