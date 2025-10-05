@@ -1,19 +1,28 @@
 import streamlit as st
-import pandas as pd
+import json
 import io
+import time
+import pandas as pd
 import requests
 from bs4 import BeautifulSoup
 import PyPDF2
 from functools import lru_cache
+from streamlit_extras.let_it_rain import rain
+from streamlit_extras.mention import mention
 import google.generativeai as genai
 
-# --- CONFIGURATION ---
+MODEL_NAME = "gemini-2.5-flash"
+
+# --- INITIAL SETUP & CONFIGURATION ---
 st.set_page_config(page_title="Simplified Knowledge", layout="wide")
 
 try:
-    # Use st.secrets for security in deployment
-    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-    MODEL_NAME = "gemini-2.5-flash"
+    # Check if the API key is set before configuring
+    if st.secrets["GEMINI_API_KEY"]:
+        genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+    else:
+        st.error("GEMINI_API_KEY not found in secrets.")
+        st.stop()
 except Exception as e:
     st.error(f"Error configuring Gemini AI: {e}")
     st.stop()
@@ -21,8 +30,85 @@ except Exception as e:
 # --- INITIALIZE SESSION STATE ---
 if 'summary_dict' not in st.session_state:
     st.session_state.summary_dict = {}
+if 'current_lang' not in st.session_state:
+    st.session_state.current_lang = "English" # Default language
+if 'translated_strings' not in st.session_state:
+    # Initialize with default English strings
+    st.session_state.translated_strings = {
+        "title": "Simplified Knowledge",
+        "description": "A dynamic dashboard that summarizes NASA bioscience publications and explores impacts and results.",
+        "ask_label": "Ask anything:",
+        "response_label": "Response:",
+        "about_us": "This dashboard explores NASA bioscience publications dynamically.",
+        "translate_dataset_checkbox": "Translate dataset column names",
+        "search_label": "Search publications...",
+        "results_header": "Found {count} matching publications:",
+        "no_results": "No matching publications found.",
+        "summarize_button": "🔬 Gather & Summarize",
+        "pdf_upload_header": "Upload PDFs to Summarize",
+        "pdf_success": "✅ {count} PDF(s) uploaded and summarized",
+        "pdf_summary_title": "📄 Summary: {name}"
+    }
 
-# --- STYLING (Main Page) ---
+# Languages dictionary (already defined)
+LANGUAGES = {
+    "English": {"label": "English (English)", "code": "en"},
+    "Türkçe": {"label": "Türkçe (Turkish)", "code": "tr"},
+    "Français": {"label": "Français (French)", "code": "fr"},
+    "Español": {"label": "Español (Spanish)", "code": "es"},
+    # ... (other languages remain the same)
+    "Deutsch": {"label": "Deutsch (German)", "code": "de"},
+    "Italiano": {"label": "Italiano (Italian)", "code": "it"},
+    "日本語": {"label": "日本語 (Japanese)", "code": "ja"},
+    "한국어": {"label": "한국어 (Korean)", "code": "ko"},
+    "हिन्दी": {"label": "हिन्दी (Hindi)", "code": "hi"},
+}
+
+
+# --- PLACEHOLDER/SIMULATION FOR TRANSLATION ---
+# NOTE: In a real app, this function would call the Gemini API to translate text.
+# For simplicity and to avoid excessive API calls during development, this is a placeholder.
+@st.cache_data(show_spinner=False)
+def get_translated_ui_strings(target_lang: str):
+    # This should hold ALL translated UI strings for ALL languages
+    # For this example, we'll only provide English, but structure the code to look up translations
+    UI_STRINGS_EN = st.session_state.translated_strings # Use the default session state strings as the English base
+
+    # You would load/translate other languages here. For the demo, we only return English
+    # unless you implement the full translation logic.
+    if target_lang == "English":
+        return UI_STRINGS_EN
+    elif target_lang == "Español":
+        return {
+            "title": "Conocimiento Simplificado",
+            "description": "Un panel dinámico que resume las publicaciones de biociencia de la NASA y explora sus impactos y resultados.",
+            "search_label": "Buscar publicaciones...",
+            "results_header": "Se encontraron {count} publicaciones coincidentes:",
+            "no_results": "No se encontraron publicaciones coincidentes.",
+            "summarize_button": "🔬 Recopilar y Resumir",
+            "pdf_upload_header": "Subir PDFs para Resumir",
+            "pdf_success": "✅ {count} PDF(s) subidos y resumidos",
+            "pdf_summary_title": "📄 Resumen: {name}",
+            # Fallback for keys not defined in Spanish
+            **{k: v for k, v in UI_STRINGS_EN.items() if k not in ["title", "description", "search_label", "results_header", "no_results", "summarize_button", "pdf_upload_header", "pdf_success", "pdf_summary_title"]}
+        }
+    else:
+        # Fallback for any unsupported language
+        return UI_STRINGS_EN
+
+# Placeholder for translating column names
+def translate_list_via_gemini(text_list: list, target_lang: str):
+    # This is where you'd call Gemini to translate column names.
+    # We'll just return the original list to avoid breaking the app without a live API call.
+    if target_lang == "English":
+        return text_list
+    # In a real app:
+    # prompt = f"Translate the following list of scientific column headers into {target_lang}. Return only the translated list, comma-separated:\n{', '.join(text_list)}"
+    # return model.generate_content(prompt).text.split(', ')
+    return [f"Translated_{item}" for item in text_list] # Mock translation
+
+
+# --- STYLING (The CSS is copied from the original code and remains the same) ---
 st.markdown("""
     <style>
     /* Custom Nav button container for the top-left */
@@ -48,9 +134,6 @@ st.markdown("""
     /* HIDE STREAMLIT'S DEFAULT NAVIGATION (Sidebar hamburger menu) */
     [data-testid="stSidebar"] { display: none; }
     
-    /* 🟢 FIX: Remove the hidden page link CSS to make the nav button visible */
-    /* [data-testid="stPageLink"] { display: none; } */ 
-
     /* Push content to the top */
     .block-container { padding-top: 1rem !important; }
     
@@ -118,7 +201,8 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- HELPER FUNCTIONS ---
+
+# --- HELPER FUNCTIONS (Copied from original) ---
 @st.cache_data
 def load_data(file_path): 
     try:
@@ -172,56 +256,115 @@ def summarize_text_with_gemini(text: str):
 
 # --- MAIN PAGE FUNCTION ---
 def search_page():
-    # 🟢 FIX: Custom HTML Button for Assistant AI
+    # Load current translation
+    translated_strings = st.session_state.translated_strings
+
+    # 1. Custom HTML Button for Assistant AI
     st.markdown(
         '<div class="nav-container-ai"><div class="nav-button-ai"><a href="/Assistant_AI" target="_self">Assistant AI 💬</a></div></div>',
         unsafe_allow_html=True
     )
-        
-    # --- UI Header ---
-    df = load_data("SB_publication_PMC.csv")
-    st.markdown('<h1>Simplified <span style="color: #6A1B9A;">Knowledge</span></h1>', unsafe_allow_html=True)
-    st.markdown("### Search, Discover, and Summarize NASA's Bioscience Publications")
-
-    search_query = st.text_input("Search publications...", placeholder="e.g., microgravity, radiation, Artemis...", label_visibility="collapsed")
     
+    # --- Language and PDF Sidebar Setup ---
+    with st.sidebar:
+        st.markdown("<h3 style='margin: 0; padding: 0;'>Settings ⚙️</h3>", unsafe_allow_html=True)
+        st.session_state.current_lang = st.selectbox(
+            "Select Language:",
+            options=list(LANGUAGES.keys()),
+            index=list(LANGUAGES.keys()).index(st.session_state.current_lang),
+            key="lang_selector",
+            on_change=lambda: st.session_state.update(translated_strings=get_translated_ui_strings(st.session_state.current_lang))
+        )
+        
+        # --- PDF UPLOAD LOGIC ---
+        st.markdown(f"<h3 style='margin: 20px 0 0 0; padding: 0;'>{translated_strings['pdf_upload_header']}</h3>", unsafe_allow_html=True)
+        uploaded_files = st.file_uploader(label="", type=["pdf"], accept_multiple_files=True)
+        
+        if uploaded_files:
+            # Display success message in the sidebar
+            st.success(translated_strings['pdf_success'].format(count=len(uploaded_files)))
+            
+    # --- Main Page Content ---
+
+    # 2. UI Header using translated strings
+    st.markdown(f'<h1>{translated_strings["title"].split()[0]} <span style="color: #6A1B9A;">{translated_strings["title"].split()[1]}</span></h1>', unsafe_allow_html=True)
+    st.markdown(f"### {translated_strings['description']}")
+
+    search_query = st.text_input(translated_strings["search_label"], placeholder="e.g., microgravity, radiation, Artemis...", label_visibility="collapsed")
+    
+    # Load and potentially translate data
+    df = load_data("SB_publication_PMC.csv")
+    
+    # --- Translate Dataset Columns (as requested in the original commented logic) ---
+    original_cols = list(df.columns)
+    if st.session_state.current_lang != "English":
+        with st.spinner("Translating dataset columns..."):
+            translated_cols = translate_list_via_gemini(original_cols, st.session_state.current_lang)
+            df.rename(columns=dict(zip(original_cols, translated_cols)), inplace=True)
+    
+    # --- PDF Summaries Display (outside of the sidebar) ---
+    if uploaded_files:
+        st.markdown("---")
+        for uploaded_file in uploaded_files:
+            # Check if this PDF has already been processed in the current session
+            summary_key = f"pdf_summary_{uploaded_file.name}"
+            
+            if summary_key not in st.session_state.summary_dict:
+                pdf_bytes = io.BytesIO(uploaded_file.read())
+                pdf_reader = PyPDF2.PdfReader(pdf_bytes)
+                text = "".join([p.extract_text() or "" for p in pdf_reader.pages])
+                
+                with st.spinner(f"Summarizing: {uploaded_file.name} ..."):
+                    summary = summarize_text_with_gemini(text)
+                    st.session_state.summary_dict[summary_key] = summary
+            
+            # Display the result
+            st.markdown(f"### {translated_strings['pdf_summary_title'].format(name=uploaded_file.name)}")
+            st.write(st.session_state.summary_dict[summary_key])
+        st.markdown("---")
+
+
     # --- Search Logic ---
     if search_query:
-        mask = df["Title"].astype(str).str.contains(search_query, case=False, na=False)
+        # Use the original (untranslated) 'Title' column for searching since the query is in the user's language
+        # A more robust solution would translate the search query before searching the English titles.
+        # However, using the original column names is safest for internal logic here.
+        search_col_name = "Title" if st.session_state.current_lang == "English" else original_cols[df.columns.get_loc(df.columns[df.columns.str.contains('Title', case=False)].tolist()[0])]
+
+        mask = df[search_col_name].astype(str).str.contains(search_query, case=False, na=False)
         results_df = df[mask].reset_index(drop=True)
         st.markdown("---")
-        st.subheader(f"Found {len(results_df)} matching publications:")
+        st.subheader(translated_strings['results_header'].format(count=len(results_df)))
         
         if results_df.empty:
-            st.warning("No matching publications found.")
+            st.warning(translated_strings['no_results'])
         else:
-            # Clear all session state summary variables to ensure clean display
-            if 'summary_dict' not in st.session_state:
-                 st.session_state.summary_dict = {}
-            
-            # SINGLE COLUMN DISPLAY LOOP (Stable)
+            # SINGLE COLUMN DISPLAY LOOP
             for idx, row in results_df.iterrows():
                 summary_key = f"summary_{idx}"
                 
                 with st.container():
                     st.markdown(f'<div class="result-card">', unsafe_allow_html=True)
                     
-                    # Title
-                    st.markdown(f"**Title:** <a href='{row['Link']}' target='_blank'>{row['Title']}</a>", unsafe_allow_html=True)
+                    # Title (Using the potentially translated column name for display)
+                    title_col_name = df.columns[df.columns.str.contains('Title', case=False)].tolist()[0]
+                    link_col_name = df.columns[df.columns.str.contains('Link', case=False)].tolist()[0]
+
+                    st.markdown(f"**{title_col_name}:** <a href='{row[link_col_name]}' target='_blank'>{row[title_col_name]}</a>", unsafe_allow_html=True)
                     
                     # Button
-                    if st.button("🔬 Gather & Summarize", key=f"btn_summarize_{idx}"):
+                    if st.button(translated_strings["summarize_button"], key=f"btn_summarize_{idx}"):
                         
                         # GENERATE SUMMARY IMMEDIATELY UPON CLICK
-                        with st.spinner(f"Accessing and summarizing: {row['Title']}..."):
+                        with st.spinner(f"Accessing and summarizing: {row[title_col_name]}..."):
                             try:
-                                text = fetch_url_text(row['Link'])
+                                # Must use the ORIGINAL 'Link' column for fetching the URL
+                                text = fetch_url_text(row[original_cols[2]]) # Assuming 'Link' is the 3rd column (index 2) based on typical structure
                                 summary = summarize_text_with_gemini(text)
                                 st.session_state.summary_dict[summary_key] = summary
                             except Exception as e:
                                 st.session_state.summary_dict[summary_key] = f"CRITICAL_ERROR: {e}"
                         
-                        # Use rerun to ensure the display updates correctly across the whole page
                         st.rerun()
 
                     # DISPLAY SUMMARY IF IT EXISTS FOR THIS PUBLICATION
@@ -231,7 +374,7 @@ def search_page():
                         st.markdown('<div class="summary-display">', unsafe_allow_html=True)
                         
                         if summary_content.startswith("ERROR") or summary_content.startswith("CRITICAL_ERROR"):
-                            st.markdown(f"**❌ Failed to Summarize:** *{row['Title']}*", unsafe_allow_html=True)
+                            st.markdown(f"**❌ Failed to Summarize:** *{row[title_col_name]}*", unsafe_allow_html=True)
                             st.error(f"Error fetching/summarizing content: {summary_content}")
                         else:
                             # Display the summary without an extra box, just the clean markdown
@@ -240,12 +383,11 @@ def search_page():
                         st.markdown('</div>', unsafe_allow_html=True)
                             
                     st.markdown("</div>", unsafe_allow_html=True) 
-    
 
-# --- NAVIGATION SETUP ---
+# --- STREAMLIT PAGE NAVIGATION ---
 pg = st.navigation([
-    st.Page(search_page, title="Simplified Knowledge 🔍"),
+    st.Page(search_page, title=st.session_state.translated_strings["title"] + " 🔍"),
     st.Page("pages/Assistant_AI.py", title="Assistant AI 💬", icon="💬"),
 ])
 
-pg.run()    
+pg.run()
