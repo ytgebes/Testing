@@ -26,26 +26,16 @@ if 'summary_title' not in st.session_state:
 # --- STYLING ---
 st.markdown("""
     <style>
-    /* HIDE STREAMLIT'S DEFAULT NAVIGATION */
+    /* HIDE STREAMLIT'S DEFAULT NAVIGATION (This is the sidebar hamburger menu) */
     [data-testid="stSidebar"] { display: none; }
+    /* HIDE THE AUTO-GENERATED LINKS FROM st.navigation */
     [data-testid="stPageLink"] { display: none; } 
 
     /* Push content to the top */
     .block-container { padding-top: 1rem !important; }
 
-    /* Custom Nav button container for the top-left */
-    .nav-container {
-        display: flex;
-        justify-content: flex-start;
-        padding-top: 2rem; 
-        padding-bottom: 2rem;
-    }
-    .nav-button a {
-        background-color: #7B1AF3; color: white; padding: 10px 20px;
-        border-radius: 8px; text-decoration: none; font-weight: bold;
-        transition: background-color 0.3s ease;
-    }
-    .nav-button a:hover { background-color: #5F09C1; }
+    /* REMOVE custom Nav button styling as st.navigation handles it now */
+    .nav-container { display: none; }
 
     /* Main Theme */
     h1, h3 { text-align: center; }
@@ -133,11 +123,8 @@ def summarize_text_with_gemini(text: str):
 
 # --- MAIN PAGE FUNCTION ---
 def search_page():
-    # --- NAVIGATION BUTTON (Custom HTML link) ---
-    st.markdown(
-        '<div class="nav-container"><div class="nav-button"><a href="/Assistant_AI" target="_self">Assistant AI 💬</a></div></div>',
-        unsafe_allow_html=True
-    )
+    # --- NAVIGATION BUTTON (Uses st.page_link for official navigation) ---
+    st.page_link("pages/Assistant_AI.py", label="Assistant AI 💬", icon="💬")
     
     # --- UI Header ---
     df = load_data("SB_publication_PMC.csv")
@@ -156,6 +143,7 @@ def search_page():
         if results_df.empty:
             st.warning("No matching publications found.")
         else:
+            # Clear previous summary content when a new search is run
             st.session_state.summary_content = None
             st.session_state.summary_title = None
 
@@ -172,7 +160,6 @@ def search_page():
                         if st.button("🔬 Gather & Summarize", key=f"summarize_{idx}"):
                             
                             st.session_state.summary_title = row['Title']
-                            st.session_state.summary_content = "Loading summary..." 
                             
                             with st.spinner(f"Accessing and summarizing: {row['Title']}..."):
                                 try:
@@ -182,6 +169,7 @@ def search_page():
                                 except Exception as e:
                                     st.session_state.summary_content = f"**Critical Error during summarization:** {e}. Please check your API key and the publication link."
 
+                            # Rerun to display the summary outside the column
                             st.rerun() 
                             
                         st.markdown("</div>", unsafe_allow_html=True)
@@ -202,6 +190,8 @@ def search_page():
         st.markdown("</div>", unsafe_allow_html=True)
 
 # --- NAVIGATION SETUP ---
+# NOTE: We keep st.navigation to register the pages, but rely on st.page_link 
+# or the default Streamlit URL routing for actual navigation.
 pg = st.navigation([
     st.Page(search_page, title="Simplified Knowledge 🔍", icon="🏠"),
     st.Page("pages/Assistant_AI.py", title="Assistant AI 💬", icon="💬"),
