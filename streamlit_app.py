@@ -30,7 +30,7 @@ st.markdown("""
         display: flex;
         justify-content: flex-start;
         padding-top: 1rem; 
-        padding-bottom: 0.5rem;
+        padding-bottom: 3rem;
     }
     .nav-button-ai a {
         background-color: #6A1B9A; /* Purple color */
