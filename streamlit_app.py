@@ -247,13 +247,6 @@ st.markdown('</div>', unsafe_allow_html=True)
 # Get the language code
 selected_language_code = LANGUAGES[selected_language_name]
 
-# --- Demonstration of Use (Main Content) ---
-
-st.title("Your Application Title Here")
-st.markdown("---")
-st.write(f"The content below would be displayed in the selected language.")
-st.info(f"Language Selector Status: **{selected_language_name}** (Code: **{selected_language_code}**)")
-
 # Example Content
 st.header("Main Content Area 📄")
 st.write("This is the main body of your Streamlit application, which now flows beneath the floating language selector in the top-right corner.")
