@@ -18,7 +18,7 @@ except Exception as e:
     st.error(f"Error configuring Gemini AI. Make sure 'GEMINI_API_KEY' is set in st.secrets: {e}")
     st.stop()
 
-# --- STYLING (HEIGHT FIX APPLIED HERE) ---
+# --- STYLING (Button Height Fix Included) ---
 st.markdown("""
     <style>
     /* HIDE STREAMLIT'S DEFAULT NAVIGATION */
@@ -31,7 +31,7 @@ st.markdown("""
     .nav-container {
         display: flex;
         justify-content: flex-start; /* Aligns button to the left */
-        padding-top: 2rem; /* 👈 INCREASED PADDING TO PUSH BUTTON DOWN */
+        padding-top: 2rem; /* PUSHES BUTTON DOWN */
         padding-bottom: 2rem; /* Adds space below the button */
     }
     .nav-button a {
@@ -65,8 +65,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- NAVIGATION BUTTON ---
-# Assumes the second file is saved as Assistant_AI.py or you are using multi-page setup
+# --- NAVIGATION BUTTON (Points to /Assistant_AI) ---
 st.markdown(
     '<div class="nav-container"><div class="nav-button"><a href="/Assistant_AI" target="_self">Assistant AI 💬</a></div></div>',
     unsafe_allow_html=True
@@ -121,11 +120,9 @@ def summarize_text_with_gemini(text: str):
     prompt = (f"Summarize this NASA bioscience paper. Output in clean Markdown with a section titled 'Key Findings' (using bullet points) and a section titled 'Overview Summary' (using a paragraph).\n\nContent:\n{text}")
     
     try:
-        client = genai.Client()
-        response = client.models.generate_content(
-            model=MODEL_NAME, 
-            contents=prompt
-        )
+        # 🟢 FIX: Using genai.GenerativeModel directly after genai.configure()
+        model = genai.GenerativeModel(MODEL_NAME)
+        response = model.generate_content(prompt)
         return response.text
     except Exception as e: 
         return f"ERROR_GEMINI: {e}"
@@ -158,9 +155,7 @@ if search_query:
                     st.markdown(f'<div class="result-card">', unsafe_allow_html=True)
                     st.markdown(f"**Title:** <a href='{row['Link']}' target='_blank'>{row['Title']}</a>", unsafe_allow_html=True)
                     
-                    # Create a unique key for the button
                     if st.button("🔬 Gather & Summarize", key=f"summarize_{idx}"):
-                        # Display loading and results in a clean area
                         summary_placeholder = st.empty()
                         with summary_placeholder.container():
                             with st.spinner("Accessing and summarizing content..."):
