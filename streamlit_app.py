@@ -23,7 +23,7 @@ if 'summary_content' not in st.session_state:
 if 'summary_title' not in st.session_state:
     st.session_state.summary_title = None
 
-# --- STYLING (Main Page) ---
+# --- STYLING ---
 st.markdown("""
     <style>
     /* HIDE STREAMLIT'S DEFAULT NAVIGATION */
@@ -60,7 +60,7 @@ st.markdown("""
         margin-bottom: 1rem; border: 1px solid #E0E0E0;
         box-shadow: 0 2px 4px rgba(0,0,0,0.05);
     }
-    .summary-card {
+    .summary-card { 
         background-color: #E6F0FF; 
         padding: 2rem; 
         border-radius: 10px; 
@@ -77,9 +77,10 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- HELPER FUNCTIONS (unchanged) ---
+# --- HELPER FUNCTIONS ---
 @st.cache_data
 def load_data(file_path): 
+    """Loads the publication data."""
     try:
         return pd.read_csv(file_path)
     except FileNotFoundError:
@@ -91,7 +92,7 @@ def load_data(file_path):
 
 @lru_cache(maxsize=128)
 def fetch_url_text(url: str):
-    # ... (Keep this function exactly as it is) ...
+    """Fetches text content from a URL, handling HTML and basic PDF parsing."""
     try:
         headers = {"User-Agent": "Mozilla/5.0"}
         r = requests.get(url, headers=headers, timeout=20)
@@ -117,6 +118,7 @@ def fetch_url_text(url: str):
             return f"ERROR_HTML_PARSE: {e}"
 
 def summarize_text_with_gemini(text: str):
+    """Generates a summary using the Gemini API."""
     if not text or text.startswith("ERROR"): 
         return f"Could not summarize due to a content error: {text.split(': ')[-1]}"
 
@@ -168,11 +170,18 @@ def search_page():
                         st.markdown(f"**Title:** <a href='{row['Link']}' target='_blank'>{row['Title']}</a>", unsafe_allow_html=True)
                         
                         if st.button("🔬 Gather & Summarize", key=f"summarize_{idx}"):
+                            
                             st.session_state.summary_title = row['Title']
+                            st.session_state.summary_content = "Loading summary..." 
                             
                             with st.spinner(f"Accessing and summarizing: {row['Title']}..."):
-                                text = fetch_url_text(row['Link'])
-                                st.session_state.summary_content = summarize_text_with_gemini(text)
+                                try:
+                                    text = fetch_url_text(row['Link'])
+                                    summary = summarize_text_with_gemini(text)
+                                    st.session_state.summary_content = summary
+                                except Exception as e:
+                                    st.session_state.summary_content = f"**Critical Error during summarization:** {e}. Please check your API key and the publication link."
+
                             st.rerun() 
                             
                         st.markdown("</div>", unsafe_allow_html=True)
@@ -182,7 +191,13 @@ def search_page():
     if st.session_state.summary_content:
         st.markdown("---")
         st.markdown(f'<div class="summary-card">', unsafe_allow_html=True)
-        st.markdown(f"## 📄 Summary for: {st.session_state.summary_title}")
+        
+        title = st.session_state.summary_title
+        if "Critical Error" in st.session_state.summary_content:
+             st.markdown(f"## ❌ Failed to Summarize: {title}")
+        else:
+             st.markdown(f"## 📄 Summary for: {title}")
+             
         st.markdown(st.session_state.summary_content)
         st.markdown("</div>", unsafe_allow_html=True)
 
