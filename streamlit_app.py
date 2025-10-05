@@ -97,7 +97,7 @@ def fetch_url_text(url: str):
 
 def summarize_text_with_gemini(text: str):
     if not text or text.startswith("ERROR"): return text
-    prompt = (f"Summarize this NASA paper. Output in Markdown with 'Key Findings' (bullets) and a 'Plain Language Summary' (paragraph).\n\nContent:\n{text[:25000]}")
+    prompt = (f"Summarize this NASA paper. Output in Markdown with 'Key Findings' (bullets) and a 'Overview Summary' (paragraph).\n\nContent:\n{text[:25000]}")
     try:
         model = genai.GenerativeModel(MODEL_NAME)
         return model.generate_content(prompt).text
