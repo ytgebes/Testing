@@ -18,18 +18,16 @@ except Exception as e:
     st.stop()
 
 # --- INITIALIZE SESSION STATE ---
-# This holds the summary content to be displayed below the columns
 if 'summary_content' not in st.session_state:
     st.session_state.summary_content = None
 if 'summary_title' not in st.session_state:
     st.session_state.summary_title = None
 
-# --- STYLING ---
+# --- STYLING (Main Page) ---
 st.markdown("""
     <style>
-    /* HIDE STREAMLIT'S DEFAULT NAVIGATION (This is the hamburger menu/sidebar) */
+    /* HIDE STREAMLIT'S DEFAULT NAVIGATION */
     [data-testid="stSidebar"] { display: none; }
-    /* This also hides the auto-generated navigation menu */
     [data-testid="stPageLink"] { display: none; } 
 
     /* Push content to the top */
@@ -39,7 +37,7 @@ st.markdown("""
     .nav-container {
         display: flex;
         justify-content: flex-start;
-        padding-top: 2rem; /* PUSHES BUTTON DOWN */
+        padding-top: 2rem; 
         padding-bottom: 2rem;
     }
     .nav-button a {
@@ -62,7 +60,7 @@ st.markdown("""
         margin-bottom: 1rem; border: 1px solid #E0E0E0;
         box-shadow: 0 2px 4px rgba(0,0,0,0.05);
     }
-    .summary-card { /* New style for the full-width summary */
+    .summary-card {
         background-color: #E6F0FF; 
         padding: 2rem; 
         border-radius: 10px; 
@@ -79,9 +77,17 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- HELPER FUNCTIONS ---
+# --- HELPER FUNCTIONS (unchanged) ---
 @st.cache_data
-def load_data(file_path): return pd.read_csv(file_path)
+def load_data(file_path): 
+    try:
+        return pd.read_csv(file_path)
+    except FileNotFoundError:
+        st.error(f"File not found: {file_path}. Please ensure 'SB_publication_PMC.csv' is in the directory.")
+        st.stop()
+    except Exception as e:
+        st.error(f"Error loading data: {e}")
+        st.stop()
 
 @lru_cache(maxsize=128)
 def fetch_url_text(url: str):
@@ -111,7 +117,6 @@ def fetch_url_text(url: str):
             return f"ERROR_HTML_PARSE: {e}"
 
 def summarize_text_with_gemini(text: str):
-    """Generates a summary using the Gemini API."""
     if not text or text.startswith("ERROR"): 
         return f"Could not summarize due to a content error: {text.split(': ')[-1]}"
 
@@ -149,7 +154,6 @@ def search_page():
         if results_df.empty:
             st.warning("No matching publications found.")
         else:
-            # Clear previous summary content when a new search is run
             st.session_state.summary_content = None
             st.session_state.summary_title = None
 
@@ -163,23 +167,18 @@ def search_page():
                         st.markdown(f'<div class="result-card">', unsafe_allow_html=True)
                         st.markdown(f"**Title:** <a href='{row['Link']}' target='_blank'>{row['Title']}</a>", unsafe_allow_html=True)
                         
-                        # Use a function to set the state on button click
                         if st.button("🔬 Gather & Summarize", key=f"summarize_{idx}"):
-                            # Set the title placeholder
                             st.session_state.summary_title = row['Title']
                             
-                            # Run the summarization and store the result
                             with st.spinner(f"Accessing and summarizing: {row['Title']}..."):
                                 text = fetch_url_text(row['Link'])
                                 st.session_state.summary_content = summarize_text_with_gemini(text)
-                            # Rerun the script to display the result outside the column
                             st.rerun() 
                             
                         st.markdown("</div>", unsafe_allow_html=True)
                 col_idx += 1
     
     # --- FULL-WIDTH SUMMARY DISPLAY ---
-    # This check is performed outside the search_query block and outside the columns
     if st.session_state.summary_content:
         st.markdown("---")
         st.markdown(f'<div class="summary-card">', unsafe_allow_html=True)
@@ -188,12 +187,9 @@ def search_page():
         st.markdown("</div>", unsafe_allow_html=True)
 
 # --- NAVIGATION SETUP ---
-
-# This structure enables multi-page navigation correctly
 pg = st.navigation([
-    st.Page(search_page, title="Simplified Knowledge 🔍", icon="🏠"), # This is the main page function
-    st.Page("pages/Assistant_AI.py", title="Assistant AI 💬", icon="💬"), # This references the file in the pages folder
+    st.Page(search_page, title="Simplified Knowledge 🔍", icon="🏠"),
+    st.Page("pages/Assistant_AI.py", title="Assistant AI 💬", icon="💬"),
 ])
 
-# Run the navigation
 pg.run()
