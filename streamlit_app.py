@@ -242,7 +242,7 @@ with col_language:
 
 selected_language_code = LANGUAGES[selected_language_name]
     
-    st.markdown('</div>', unsafe_allow_html=True)
+st.markdown('</div>', unsafe_allow_html=True)
 
 # Get the language code
 selected_language_code = LANGUAGES[selected_language_name]
