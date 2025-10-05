@@ -11,14 +11,12 @@ from streamlit_extras.let_it_rain import rain
 
 # --- CONFIGURATION & INITIALIZATION ---
 
-# Configure the page
 st.set_page_config(
     page_title="NASA Simplified Knowledge",
     page_icon="🚀",
     layout="wide"
 )
 
-# Configure Gemini AI
 try:
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
     MODEL_NAME = "gemini-1.5-flash"
@@ -26,54 +24,84 @@ except Exception as e:
     st.error(f"Error configuring Gemini AI. Please check your API key in Streamlit secrets. Details: {e}")
     st.stop()
 
-# --- STYLING ---
+# --- STYLING (MODIFIED) ---
 
 st.markdown("""
     <style>
-    /* Main background and text color */
+    /* MODIFIED: Reduce top padding to push content up */
+    .block-container {
+        padding-top: 1rem !important;
+    }
+    
+    /* MODIFIED: New purple and white theme */
     body {
-        background-color: #0b3d91;
+        background-color: #1e1032; /* Deep purple background */
         color: white;
     }
-    /* Page title styling */
-    .st-emotion-cache-10trblm {
-        font-size: 4em; /* Much larger title */
+    
+    /* MODIFIED: Title styling */
+    h1 {
+        font-size: 4.5em !important; /* Even larger title */
         font-weight: bold;
         text-align: center;
-        padding-top: 1rem;
-        padding-bottom: 2rem;
+        color: #FFFFFF;
+        padding-bottom: 1rem;
     }
-    /* Search input styling */
+    
+    /* MODIFIED: Subheading styling */
+    h3 {
+        text-align: center;
+        color: #d8b8ff !important; /* Light lavender for subheading */
+    }
+
+    /* MODIFIED: Search input styling */
     input[type="text"] {
         color: white !important;
-        background-color: #1e1e2f !important;
-        border: 1px solid #444 !important;
+        background-color: #3a215b !important; /* Lighter purple input box */
+        border: 1px solid #4f2083 !important;
         border-radius: 8px;
-        padding: 12px;
+        padding: 14px;
     }
     input::placeholder {
-        color: #cccccc !important;
+        color: #d8b8ff !important;
     }
-    /* Custom result card styling */
+
+    /* MODIFIED: Custom result card styling */
     .result-card {
-        background-color: #0e2a6b;
+        background-color: #2c1a47; /* Contrasting purple for cards */
         padding: 1.5rem;
         border-radius: 10px;
         margin-bottom: 1rem;
-        border: 1px solid #1c4b82;
-        transition: transform 0.2s ease-in-out;
+        border: 1px solid #4f2083;
+        transition: transform 0.2s ease-in-out, border-color 0.2s ease-in-out;
     }
     .result-card:hover {
-        transform: scale(1.02);
-        border: 1px solid #00ffcc;
+        transform: scale(1.01);
+        border-color: #d8b8ff; /* Lavender border on hover */
     }
+    
+    /* MODIFIED: Link styling */
     a {
-        color: #00ffcc;
+        color: #FFFFFF; /* Bright white for links for high contrast */
         text-decoration: none;
+        font-weight: bold;
     }
+    a:hover {
+        text-decoration: underline;
+    }
+    
+    /* Button styling for a cohesive look */
     .stButton>button {
         border-radius: 8px;
         width: 100%;
+        background-color: #4f2083;
+        color: white;
+        border: 1px solid #d8b8ff;
+    }
+    .stButton>button:hover {
+        background-color: #d8b8ff;
+        color: #1e1032;
+        border: 1px solid #d8b8ff;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -102,7 +130,6 @@ def fetch_url_text(url: str) -> str:
 
     content_type = r.headers.get("Content-Type", "").lower()
 
-    # Handle PDF content
     if "pdf" in content_type or url.lower().endswith(".pdf"):
         try:
             with io.BytesIO(r.content) as pdf_bytes:
@@ -113,7 +140,6 @@ def fetch_url_text(url: str) -> str:
                 return "\n".join(text_parts) if text_parts else "ERROR_EXTRACT: No text could be extracted from this PDF."
         except Exception as e:
             return f"ERROR_PDF_PARSE: Failed to parse the PDF file. Reason: {str(e)}"
-    # Handle HTML content
     else:
         try:
             soup = BeautifulSoup(r.text, "html.parser")
@@ -131,7 +157,6 @@ def summarize_text_with_gemini(text: str) -> str:
     if not text or text.startswith("ERROR"):
         return text
 
-    # Truncate text to stay within model limits and improve performance
     context = text[:25000]
     prompt = (
         "You are an expert scientific analyst. Summarize the key findings from the following NASA bioscience publication content. "
@@ -149,22 +174,19 @@ def summarize_text_with_gemini(text: str) -> str:
 
 # --- MAIN PAGE UI ---
 
-# Load the dataset
 df = load_data("SB_publication_PMC.csv")
 
 st.title("Simplified Knowledge")
-st.markdown("<h3 style='text-align: center; color: #cccccc;'>Search, Discover, and Summarize NASA's Bioscience Publications</h3>", unsafe_allow_html=True)
+st.markdown("### Search, Discover, and Summarize NASA's Bioscience Publications")
 
-# --- SEARCH BAR ---
 search_query = st.text_input(
     "Enter a keyword to search all 608 NASA publications...",
     placeholder="e.g., microgravity, radiation, Artemis, cell biology...",
-    key="search_box"
+    key="search_box",
+    label_visibility="collapsed" # Hides the label for a cleaner look
 )
 
-# --- DISPLAY RESULTS ---
 if search_query:
-    # Perform a case-insensitive search on the 'Title' column
     mask = df["Title"].astype(str).str.contains(search_query, case=False, na=False)
     results_df = df[mask].reset_index(drop=True)
 
@@ -182,7 +204,6 @@ if search_query:
                 st.markdown(f'<div class="result-card">', unsafe_allow_html=True)
                 st.markdown(f"<h4><a href='{link}' target='_blank'>{title}</a></h4>", unsafe_allow_html=True)
 
-                # Use a unique key for each button by combining prefix and index
                 if st.button("🔬 Gather & Summarize", key=f"summarize_{idx}"):
                     summary_placeholder = st.empty()
                     with st.spinner("Accessing publication content... This may take a moment."):
@@ -198,5 +219,4 @@ if search_query:
 
                 st.markdown("</div>", unsafe_allow_html=True)
 
-else:
-    st.info("The search bar is ready. Start typing to find relevant NASA research.")
+# REMOVED: Deleted the 'else' block and 'st.info' message for a cleaner initial view.
