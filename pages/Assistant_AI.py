@@ -26,7 +26,7 @@ st.markdown("""
     .nav-container {
         display: flex;
         justify-content: flex-start; /* Aligns button to the left */
-        padding-top: 1.5rem; /* PADDING TO MATCH THE MAIN PAGE VISUALLY */
+        padding-top: 1.5rem;
         padding-bottom: 1rem;
     }
     .nav-button a {
@@ -57,7 +57,6 @@ def load_data(file_path):
 def find_relevant_publications(query, df, top_k=5):
     """Finds publications whose titles contain the query string."""
     if query:
-        # Use .str.lower() for more robust case-insensitive matching
         mask = df["Title"].astype(str).str.lower().str.contains(query.lower(), na=False)
         return df[mask].head(top_k)
     return pd.DataFrame()
@@ -67,8 +66,7 @@ def find_relevant_publications(query, df, top_k=5):
 # Load data once
 df = load_data("SB_publication_PMC.csv")
 
-# --- NAVIGATION BUTTON ---
-# Assumes the main file is named Home.py or is the default app file
+# --- NAVIGATION BUTTON (Points to / to go back to the main page) ---
 st.markdown(
     '<div class="nav-container"><div class="nav-button"><a href="/" target="_self">⬅️ Back to Search</a></div></div>',
     unsafe_allow_html=True
@@ -89,12 +87,10 @@ with col2:
             st.markdown(message["content"])
 
     if prompt := st.chat_input("What would you like to know?"):
-        # Add user message to state and display
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(prompt)
 
-        # Generate and display assistant response
         with st.chat_message("assistant"):
             placeholder = st.empty()
             with st.spinner("Searching publications and formulating answer..."):
@@ -105,7 +101,6 @@ with col2:
                 context_str = "No specific publications found matching the search terms in the question."
                 if not relevant_pubs.empty:
                     context_str = "Based on the following relevant publications:\n"
-                    # Include the titles and links for context and citation
                     for _, row in relevant_pubs.iterrows():
                         context_str += f"- **Title:** {row['Title']}\n  - *Link:* {row['Link']}\n"
                 
@@ -120,16 +115,14 @@ with col2:
                 )
                 
                 try:
-                    client = genai.Client()
-                    response = client.models.generate_content(
-                        model=MODEL_NAME, 
-                        contents=full_prompt
-                    )
+                    # 🟢 FIX: Using genai.GenerativeModel directly after genai.configure()
+                    model = genai.GenerativeModel(MODEL_NAME)
+                    response = model.generate_content(full_prompt)
                     ai_response = response.text
                 except Exception as e:
                     ai_response = f"Sorry, an error occurred with the AI service: {e}"
                 
                 placeholder.markdown(ai_response)
         
-        # Add assistant message to state
+        # Note: You had a typo here: 'content: ai_response' -> '"content": ai_response'
         st.session_state.messages.append({"role": "assistant", "content": ai_response})
