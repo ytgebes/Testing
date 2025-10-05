@@ -17,7 +17,7 @@ st.set_page_config(
 
 try:
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-    MODEL_NAME = "gemini-1.5-flash"
+    MODEL_NAME = "gemini-2.5-flash"
 except Exception as e:
     st.error(f"Error configuring Gemini AI. Please check your API key in Streamlit secrets. Details: {e}")
     st.stop()
