@@ -18,43 +18,26 @@ try:
     DATA_FILE = "SB_publication_PMC.csv"
 except Exception as e:
     st.error(f"Error initializing Application: {e}")
-    st.stop()
+    # Do not stop, allow the rest of the app to render the error
+    # st.stop() # Removed st.stop() for stability
 
 # --- INITIALIZE SESSION STATE ---
 if 'summary_dict' not in st.session_state:
-    # Stores {index: summary_text} pairs to keep summaries persistent
     st.session_state.summary_dict = {}
+if 'last_query' not in st.session_state:
+    st.session_state.last_query = ""
+
 
 # --- STYLING (Main Page CSS) ---
 st.markdown("""
     <style>
-    /* 1. AI Navigation Button Styling (Custom HTML link) */
-    .nav-container-ai {
-        display: flex;
-        justify-content: flex-start;
-        padding-top: 3rem; /* Adjusts vertical space above the button */
-        padding-bottom: 0rem;
-    }
-    .nav-button-ai a {
-        background-color: #6A1B9A; /* Primary Purple */
-        color: white; 
-        padding: 10px 20px;
-        border-radius: 8px; 
-        text-decoration: none; 
-        font-weight: bold;
-        transition: background-color 0.3s ease;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-    }
-    .nav-button-ai a:hover { 
-        background-color: #4F0A7B; /* Darker purple on hover */
-    }
+    /* HIDE STREAMLIT'S DEFAULT NAVIGATION (Sidebar hamburger menu is now the main navigation) */
+    /* DO NOT HIDE [data-testid="stSidebar"] or you will lose multi-page navigation! */
 
-    /* 2. Global Streamlit/Layout Overrides */
-    [data-testid="stSidebar"] { display: none; } /* Hide Sidebar menu */
-    .block-container { padding-top: 1rem !important; } /* Push content to the top */
-    .nav-container { display: none; } /* Hide old nav container if present */
+    /* Push content to the top */
+    .block-container { padding-top: 1rem !important; }
 
-    /* 3. Header and Input Styling */
+    /* Main Theme */
     h1, h3 { text-align: center; }
     h1 { font-size: 4.5em !important; padding-bottom: 0.5rem; color: #000000; }
     h3 { color: #333333; }
@@ -63,7 +46,7 @@ st.markdown("""
         border: 1px solid #CCCCCC !important; border-radius: 8px; padding: 14px;
     }
     
-    /* 4. Result Card Styling */
+    /* Result Card Styling */
     .result-card {
         background-color: #FAFAFA; 
         padding: 1.5rem; 
@@ -78,7 +61,7 @@ st.markdown("""
         margin-bottom: 10px; 
     }
 
-    /* 5. Links and Buttons */
+    /* Links and Buttons */
     a { color: #6A1B9A; text-decoration: none; font-weight: bold; }
     a:hover { text-decoration: underline; }
     
@@ -94,7 +77,7 @@ st.markdown("""
     }
     .stButton>button:hover { background-color: #D6C9FF; border: 1px solid #B098FF; }
 
-    /* 6. Summary Display Styling (Inline) */
+    /* Summary Display Styling */
     .summary-display {
         margin-top: 1rem;
         padding-top: 1rem;
@@ -140,16 +123,13 @@ def fetch_url_text(url: str):
         try:
             with io.BytesIO(r.content) as f:
                 reader = PyPDF2.PdfReader(f)
-                # Join text from all non-empty pages
                 return "\n".join(p.extract_text() for p in reader.pages if p.extract_text())
         except Exception as e: 
             return f"ERROR_PDF_PARSE: PDF reading failed - {e}"
     else:
         try:
             soup = BeautifulSoup(r.text, "html.parser")
-            # Remove scripts and styles before extracting text
             for tag in soup(['script', 'style']): tag.decompose()
-            # Extract and clean text, then truncate to model context limit
             return " ".join(soup.body.get_text(separator=" ", strip=True).split())[:25000]
         except Exception as e: 
             return f"ERROR_HTML_PARSE: HTML parsing failed - {e}"
@@ -172,16 +152,10 @@ def summarize_text_with_gemini(text: str):
     except Exception as e: 
         return f"ERROR_GEMINI: API call failed - {e}"
 
-# --- MAIN APPLICATION LOGIC ---
+# --- MAIN PAGE FUNCTION (RENAMED TO HOME) ---
 
-def search_page():
+def run_app_page():
     """Renders the main search, results, and summarization interface."""
-    
-    # Custom HTML button linking to the Assistant AI page
-    st.markdown(
-        '<div class="nav-container-ai"><div class="nav-button-ai"><a href="/Assistant_AI" target="_self">Assistant AI 💬</a></div></div>',
-        unsafe_allow_html=True
-    )
         
     # --- UI Header ---
     df = load_data(DATA_FILE)
@@ -202,8 +176,7 @@ def search_page():
             st.warning("No matching publications found.")
         else:
             
-            # Use this to clear old summaries if the search query changes
-            if 'last_query' not in st.session_state or st.session_state.last_query != search_query:
+            if st.session_state.last_query != search_query:
                 st.session_state.summary_dict = {}
                 st.session_state.last_query = search_query
 
@@ -229,7 +202,6 @@ def search_page():
                             except Exception as e:
                                 st.session_state.summary_dict[summary_key] = f"CRITICAL_ERROR: Unexpected error during summary: {e}"
                         
-                        # Rerun to display the newly generated summary in the interface
                         st.rerun()
 
                     # Display Summary if it exists in the session state
@@ -242,7 +214,6 @@ def search_page():
                             st.markdown(f"**❌ Failed to Summarize:** *{row['Title']}*", unsafe_allow_html=True)
                             st.error(f"Error details: {summary_content}")
                         else:
-                            # Display the structured Markdown summary
                             st.markdown(summary_content)
                             
                         st.markdown('</div>', unsafe_allow_html=True)
@@ -250,8 +221,5 @@ def search_page():
                     st.markdown("</div>", unsafe_allow_html=True) 
 
 # --- APPLICATION ENTRY POINT ---
-
-if __name__ == "__main__":
-    # This block executes the main function directly.
-    # It replaces the problematic st.navigation and ensures a stable app launch.
-    search_page()
+# Streamlit runs this function automatically because the file is in the pages/ directory
+run_app_page()
